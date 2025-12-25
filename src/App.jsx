@@ -20,13 +20,13 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 
 // --- FIREBASE CONFIG ---
 const firebaseConfig = {
-  apiKey: "AIzaSyACQ_Tj4eFaSH0-kzISlOI2HvROcWn4f_Y",
-  authDomain: "portal-mfg.firebaseapp.com",
-  projectId: "portal-mfg",
-  storageBucket: "portal-mfg.firebasestorage.app",
-  messagingSenderId: "1020961491752",
-  appId: "1:1020961491752:web:e1c395fe8ebb6f5a8f9e1d",
-  measurementId: "G-2Q87Z62KTM"
+  apiKey: "AIzaSyAqf-GAoJFZNDGOyhg1rwgsW3j-oBSB-1s",
+  authDomain: "portal-mfg-eef79.firebaseapp.com",
+  projectId: "portal-mfg-eef79",
+  storageBucket: "portal-mfg-eef79.firebasestorage.app",
+  messagingSenderId: "71157782230",
+  appId: "1:71157782230:web:2f22967da44306acf7db77",
+  measurementId: "G-2JBD15KCK5"
 };
 
 // Initialize Firebase
