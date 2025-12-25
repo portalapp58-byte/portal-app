@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Local env files (TAMBAHKAN INI)
+.env
+.env.local
