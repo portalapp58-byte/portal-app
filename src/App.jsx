@@ -926,7 +926,7 @@ export default function App() {
   
   const getStatus = (monthKey) => { const targetAgentId = currentUser.role === 'agent' ? currentUser.id : selectedAgentId; if(targetAgentId === 'all') return 'mixed'; return monthlyStatus[`status_${monthKey}_${targetAgentId}`] || 'belum'; };
   const targetAgentIdForInput = currentUser?.role === 'agent' ? currentUser.id : selectedAgentId;
-  const showAddButton = viewMode === 'orders' && targetAgentIdForInput !== 'all';
+  const showAddButton = currentUser?.role === 'admin' && viewMode === 'orders' && targetAgentIdForInput !== 'all';
   const isAgent = currentUser?.role === 'agent';
   const headerStyle = isAgent ? `bg-gradient-to-r ${getAgentGradient(currentUser.name)} text-white shadow-md` : 'backdrop-blur-md bg-opacity-80 card-bg shadow-sm border-b';
 
