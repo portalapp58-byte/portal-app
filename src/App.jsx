@@ -488,20 +488,20 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
           executePdf();
       }
 
-      function executePdf() {
-         const element = document.getElementById('report-content');
-         const opt = {
-  margin: 0,
-  filename: `Laporan_${agentName || 'All'}_${month}.pdf`,
-  image: { type: 'jpeg', quality: 0.98 },
-  html2canvas: { scale: 2, useCORS: true },
-  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+function executePdf() {
+  const element = document.getElementById('report-content');
 
-  pagebreak: {
-    mode: ['css', 'legacy'],
-    before: '.pdf-page'
-  }
-};
+  const opt = {
+    margin: 0,
+    filename: `Laporan_${agentName || 'All'}_${month}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css','legacy'], before: '.pdf-page' }
+  };
+
+  window.html2pdf().from(element).set(opt).save();
+}
 
   const [zoomLevel, setZoomLevel] = useState(0.5);
   const ITEMS_PER_PAGE = 9; 
