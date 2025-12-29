@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   User, Plus, FileText, LogOut, Search, Calendar, 
@@ -134,7 +135,7 @@ const DEFAULT_COMPANY = {
   logo: null
 };
 
-// --- GLOBAL STYLES (FIXED FOR PRINT & PDF) ---
+// --- GLOBAL STYLES ---
 const GlobalStyleInjector = ({ mode, fontSize }) => {
   return (
     <style>{`
@@ -159,47 +160,15 @@ const GlobalStyleInjector = ({ mode, fontSize }) => {
       }
       .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
 
-      /* --- FIXED PRINT & PDF STYLES --- */
       @media print {
-        @page { 
-            size: A4 portrait; 
-            margin: 0; 
-        }
-        
-        body * { 
-            visibility: hidden; 
-        }
-        
-        /* Hanya tampilkan area laporan */
-        #report-print-area, #report-print-area * { 
-            visibility: visible; 
-        }
-        
-        #report-print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 210mm;
-            margin: 0;
-            padding: 0;
-            transform: none !important; /* Reset zoom */
-            background-color: white;
-        }
-
-        /* Paksa background color tercetak */
-        * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            color-adjust: exact !important;
-        }
-
-        .no-print, button, header, .fixed-ui { display: none !important; }
-        
-        /* Page break utilities */
-        .page-break { page-break-after: always; break-after: page; }
-        
-        /* Hapus shadow dan border saat print */
-        .shadow-2xl, .shadow-lg, .shadow-md, .shadow-sm { box-shadow: none !important; }
+        @page { size: A4 portrait; margin: 0; }
+        body { background: white !important; color: black !important; font-size: 12px !important; }
+        .no-print, header, .fixed, button { display: none !important; }
+        .bg-white { width: 210mm !important; min-height: 297mm !important; margin: 0 !important; page-break-after: always; box-shadow: none !important; border: none !important; transform: none !important; }
+        .bg-white:last-child { page-break-after: auto; }
+        .grid-cols-3 { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
+        img { object-fit: cover !important; }
+        .absolute.bottom-12mm { bottom: 12mm !important; }
       }
     `}</style>
   );
@@ -208,7 +177,7 @@ const GlobalStyleInjector = ({ mode, fontSize }) => {
 // --- COMPONENTS ---
 
 const SuccessPopup = () => (
-  <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center animate-in fade-in duration-300 backdrop-blur-sm px-4 no-print">
+  <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center animate-in fade-in duration-300 backdrop-blur-sm px-4">
     <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center animate-in zoom-in duration-300 border-4 border-emerald-100 w-full max-w-sm">
       <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mb-4 shadow-lg shadow-emerald-200">
         <CheckCircle className="w-12 h-12 text-white" strokeWidth={3} />
@@ -220,7 +189,7 @@ const SuccessPopup = () => (
 );
 
 const NotificationToast = ({ message, type, onClose }) => (
-  <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[150] px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 w-[90%] max-w-[350px] animate-in slide-in-from-top-5 fade-in duration-300 no-print ${type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>
+  <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[150] px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 w-[90%] max-w-[350px] animate-in slide-in-from-top-5 fade-in duration-300 ${type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>
     {type === 'error' ? <AlertTriangle className="w-4 h-4 flex-shrink-0"/> : <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0"/>}
     <p className="font-bold text-xs flex-1 truncate">{typeof message === 'string' ? message : 'Notifikasi sistem'}</p>
     <button onClick={onClose}><X className="w-3 h-3 opacity-70 hover:opacity-100"/></button>
@@ -229,8 +198,8 @@ const NotificationToast = ({ message, type, onClose }) => (
 
 const GridOrderCard = ({ item, index, globalIndex }) => {
   return (
-    <div className="border border-gray-400 p-1 flex flex-col h-full w-full bg-white relative break-inside-avoid overflow-hidden box-border">
-      <div className="absolute top-0 left-0 bg-gray-900 text-white text-[8px] font-bold px-1.5 py-0.5 z-20 rounded-br">#{globalIndex + 1}</div>
+    <div className="border border-gray-400 p-1 flex flex-col h-full w-full bg-white relative break-inside-avoid print:border-gray-400 overflow-hidden box-border">
+      <div className="absolute top-0 left-0 bg-gray-900 text-white text-[8px] font-bold px-1.5 py-0.5 z-20 print:bg-gray-900 print:text-white rounded-br">#{globalIndex + 1}</div>
       <div className="h-[50%] w-full bg-gray-50 mb-1 overflow-hidden border border-gray-200 relative shrink-0">
         {item.photo ? <img src={item.photo} className="absolute inset-0 w-full h-full object-cover" /> : <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-[9px]"><ImageIcon className="w-5 h-5 mb-1 opacity-40"/><span>No Foto</span></div>}
       </div>
@@ -243,7 +212,7 @@ const GridOrderCard = ({ item, index, globalIndex }) => {
           <div className="max-h-[22px] overflow-hidden"><p className="font-bold text-gray-900 uppercase text-[8px] leading-3 line-clamp-2">{item.address}</p></div>
           {item.description && <p className="text-gray-500 italic truncate mt-0.5 text-[7px] bg-gray-50 px-1 rounded">{item.description}</p>}
         </div>
-        <div className="mt-0.5 bg-gray-50 p-0.5 border border-gray-200 shrink-0 rounded-sm">
+        <div className="mt-0.5 bg-gray-50 p-0.5 border border-gray-200 print:bg-transparent print:border-gray-300 shrink-0 rounded-sm">
           <div className="flex justify-between"><span>Harga</span><span>{formatCurrency(item.price)}</span></div>
           <div className="flex justify-between"><span>Ongkir</span><span>{formatCurrency(item.shipping)}</span></div>
           <div className="flex justify-between text-red-600"><span>Fee</span><span>-{formatCurrency(item.fee)}</span></div>
@@ -497,7 +466,7 @@ const SettingsModal = ({ onClose, companyInfo, agents, onUpdateCompany, notify, 
   );
 };
 
-// --- REPORT PREVIEW MODAL (FIXED FOR A4) ---
+// REPORT PREVIEW MODAL
 const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyInfo, notify }) => {
   const handlePrint = () => window.print();
   const handlePdf = () => {
@@ -512,25 +481,9 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
       }
 
       function executePdf() {
-         const element = document.getElementById('report-print-area');
-         // Konfigurasi PDF agar pas A4 dan tidak terpotong
-         const opt = { 
-             margin: 0, // Margin dihandle oleh CSS container
-             filename: `Laporan_${agentName || 'All'}_${month}.pdf`, 
-             image: { type: 'jpeg', quality: 0.98 }, 
-             html2canvas: { 
-                 scale: 2, // Kualitas tinggi
-                 useCORS: true,
-                 scrollY: 0
-             }, 
-             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
-         };
-         
-         if(notify) notify("Sedang memproses PDF...", "success");
-         
-         window.html2pdf().set(opt).from(element).save().then(() => { 
-             if(notify) notify("PDF berhasil diunduh!", "success"); 
-         });
+         const element = document.getElementById('report-content');
+         const opt = { margin: 0, filename: `Laporan_${agentName || 'All'}_${month}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+         window.html2pdf().set(opt).from(element).save().then(() => { if(notify) notify("PDF berhasil diunduh!", "success"); });
       }
   };
 
@@ -541,104 +494,93 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
   if (pages.length === 0) pages.push([]);
 
   useEffect(() => {
-    // Zoom hanya untuk visual di layar laptop, tidak mempengaruhi print
-    const handleResize = () => setZoomLevel(Math.min((window.innerWidth - 40) / 820, 1));
+    const handleResize = () => setZoomLevel(Math.min((window.innerWidth - 32) / 820, 1));
     handleResize(); window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   return (
     <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center animate-in fade-in duration-300 supports-[min-h:100dvh]:min-h-[100dvh]">
-      {/* Header Toolbar (Hidden on Print) */}
-      <div className="w-full bg-gray-900 border-b border-gray-800 p-3 flex justify-between items-center z-50 no-print shadow-lg shrink-0">
+      <div className="w-full bg-gray-900 border-b border-gray-800 p-3 flex justify-between items-center z-50 print:hidden shadow-lg shrink-0">
          <div className="text-white flex flex-col"><h3 className="font-bold text-sm flex items-center gap-2">Preview Laporan</h3></div>
          <div className="flex gap-2"><button onClick={handlePdf} className="bg-red-600 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg font-bold text-xs flex gap-2 hover:bg-red-700 transition-colors"><Download className="w-4 h-4"/><span className="hidden md:inline">Download PDF</span></button><button onClick={handlePrint} className="bg-blue-600 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg font-bold text-xs flex gap-2 hover:bg-blue-700 transition-colors"><Printer className="w-4 h-4"/><span className="hidden md:inline">Cetak</span></button><button onClick={onClose} className="bg-gray-800 text-white p-2 rounded-lg border border-gray-700"><X className="w-5 h-5"/></button></div>
       </div>
-      
-      {/* Scrollable Container */}
-      <div className="flex-1 w-full overflow-auto p-4 flex flex-col items-center bg-gray-800/50">
-        {/* Zoom Wrapper - Apply visual scale here, but NOT on the print ID */}
-        <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', marginBottom: '50px' }}>
-            
-            {/* THIS ID 'report-print-area' IS TARGETED BY PRINT/PDF. IT MUST BE PURE A4 SIZE */}
-            <div id="report-print-area" className="bg-white text-black relative flex flex-col items-center shadow-2xl">
+      <div className="flex-1 w-full overflow-auto p-4 print:p-0 flex flex-col items-center">
+        <div id="report-content" style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', width: '210mm' }} className="print:transform-none print:w-full">
+            {/* Page 1: Invoice */}
+            <div className="bg-white text-black shadow-2xl mb-8 relative flex flex-col print:shadow-none print:mb-0 print:break-after-page box-border overflow-hidden" style={{ width: '210mm', height: '296mm', padding: '20mm' }}>
+                <div className="border-b-4 border-double border-gray-900 pb-6 mb-8 text-center h-[40mm] flex flex-col justify-end">
+                    {companyInfo.kopSurat ? <img src={companyInfo.kopSurat} className="w-full h-full object-contain object-bottom"/> : <div className="flex flex-col items-center justify-end h-full">{companyInfo.logo && <img src={companyInfo.logo} className="h-16 mb-2 object-contain"/>}<h1 className="text-3xl font-black text-gray-900 tracking-wide leading-none mb-2">{companyInfo.name}</h1><p className="text-sm font-bold text-gray-600 uppercase tracking-[0.2em]">{companyInfo.subname}</p><div className="mt-4 text-xs text-gray-500 font-medium"><p>{companyInfo.address}</p><p>Telp: {companyInfo.phone}</p></div></div>}
+                </div>
+                <div className="text-center mb-10"><h2 className="text-3xl font-black uppercase text-gray-800 underline decoration-4 decoration-green-600 underline-offset-8">INVOICE TAGIHAN</h2><p className="text-sm text-gray-500 mt-2 font-medium tracking-wide">PERIODE: {month ? month.toUpperCase() : '-'}</p></div>
+                <div className="flex justify-between items-start mb-10">
+                   <div className="w-[48%]"><p className="text-xs font-bold text-gray-400 uppercase mb-1">DITAGIHKAN KEPADA:</p><div className="bg-gray-50 p-4 rounded-lg border border-gray-200"><p className="font-bold text-xl text-gray-800 uppercase leading-tight">{agentName || '-'}</p><p className="text-sm text-gray-500 mt-1">Mitra Agen Resmi</p></div></div>
+                   <div className="w-[48%] text-right"><p className="text-xs font-bold text-gray-400 uppercase mb-1">RINGKASAN:</p><div className="bg-gray-50 p-4 rounded-lg border border-gray-200"><p className="text-sm text-gray-600">Total Transaksi</p><p className="font-black text-3xl text-gray-800">{stats.count} <span className="text-sm font-normal text-gray-500">Unit</span></p></div></div>
+                </div>
                 
-                {/* Page 1: Invoice */}
-                <div className="relative flex flex-col page-break box-border overflow-hidden bg-white" style={{ width: '210mm', height: '296mm', padding: '20mm' }}>
-                    <div className="border-b-4 border-double border-gray-900 pb-6 mb-8 text-center h-[40mm] flex flex-col justify-end">
-                        {companyInfo.kopSurat ? <img src={companyInfo.kopSurat} className="w-full h-full object-contain object-bottom"/> : <div className="flex flex-col items-center justify-end h-full">{companyInfo.logo && <img src={companyInfo.logo} className="h-16 mb-2 object-contain"/>}<h1 className="text-3xl font-black text-gray-900 tracking-wide leading-none mb-2">{companyInfo.name}</h1><p className="text-sm font-bold text-gray-600 uppercase tracking-[0.2em]">{companyInfo.subname}</p><div className="mt-4 text-xs text-gray-500 font-medium"><p>{companyInfo.address}</p><p>Telp: {companyInfo.phone}</p></div></div>}
-                    </div>
-                    <div className="text-center mb-10"><h2 className="text-3xl font-black uppercase text-gray-800 underline decoration-4 decoration-green-600 underline-offset-8">INVOICE TAGIHAN</h2><p className="text-sm text-gray-500 mt-2 font-medium tracking-wide">PERIODE: {month ? month.toUpperCase() : '-'}</p></div>
-                    <div className="flex justify-between items-start mb-10">
-                    <div className="w-[48%]"><p className="text-xs font-bold text-gray-400 uppercase mb-1">DITAGIHKAN KEPADA:</p><div className="bg-gray-50 p-4 rounded-lg border border-gray-200"><p className="font-bold text-xl text-gray-800 uppercase leading-tight">{agentName || '-'}</p><p className="text-sm text-gray-500 mt-1">Mitra Agen Resmi</p></div></div>
-                    <div className="w-[48%] text-right"><p className="text-xs font-bold text-gray-400 uppercase mb-1">RINGKASAN:</p><div className="bg-gray-50 p-4 rounded-lg border border-gray-200"><p className="text-sm text-gray-600">Total Transaksi</p><p className="font-black text-3xl text-gray-800">{stats.count} <span className="text-sm font-normal text-gray-500">Unit</span></p></div></div>
-                    </div>
-                    
-                    {/* --- SUMMARY BOX --- */}
-                    <div className="flex justify-center mb-10">
-                        <div className="w-full max-w-xl border-2 border-gray-300 rounded-xl overflow-hidden text-sm shadow-sm print:shadow-none">
-                            <div className="flex justify-between p-4 border-b border-gray-200 bg-white items-center">
-                                <span className="font-bold text-gray-500 uppercase text-xs tracking-wider">Total Harga</span>
-                                <span className="font-black text-xl text-gray-800">{formatCurrency(stats.totalHarga)}</span>
-                            </div>
-                            <div className="flex justify-between p-4 border-b border-gray-200 bg-white items-center">
-                                <span className="font-bold text-gray-500 uppercase text-xs tracking-wider">Total Ongkir</span>
-                                <span className="font-black text-xl text-gray-800">{formatCurrency(stats.totalOngkir)}</span>
-                            </div>
-                            <div className="flex justify-between p-4 border-b border-gray-200 bg-red-50 text-red-600 items-center">
-                                <span className="font-bold uppercase text-xs tracking-wider">Fee Agen</span>
-                                <span className="font-black text-xl">({formatCurrency(stats.totalFee)})</span>
-                            </div>
-                            <div className="flex justify-between p-6 bg-gray-900 text-white items-center print:bg-black print:text-white">
-                                <span className="font-bold opacity-80 uppercase text-sm tracking-widest">Total Bayar</span>
-                                <span className="font-black text-4xl">{formatCurrency(stats.totalPayment)}</span>
-                            </div>
+                {/* --- SUMMARY BOX (Centered and Wider) --- */}
+                <div className="flex justify-center mb-10">
+                    <div className="w-full max-w-xl border-2 border-gray-300 rounded-xl overflow-hidden text-sm shadow-md">
+                        <div className="flex justify-between p-4 border-b border-gray-200 bg-white items-center">
+                            <span className="font-bold text-gray-500 uppercase text-xs tracking-wider">Total Harga</span>
+                            <span className="font-black text-xl text-gray-800">{formatCurrency(stats.totalHarga)}</span>
                         </div>
-                    </div>
-                    
-                    {/* --- BANK & INFO SECTION --- */}
-                    <div className="mb-8">
-                        <div className="mb-4 border-l-4 border-gray-800 pl-4 py-2 bg-gray-50/50 rounded-r-lg">
-                            <p className="font-bold text-gray-800 text-xs mb-2">REKENING PEMBAYARAN:</p>
-                            <div className="flex flex-wrap gap-x-8 gap-y-2 text-xs font-mono text-gray-600">
-                                {companyInfo.banks.map((b,i)=> (
-                                    <div key={i} className="flex items-center gap-2">
-                                        <span className="font-bold text-gray-800">{b.name}</span>
-                                        <span>{b.number}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <p className="text-[10px] text-gray-400 mt-2">a.n. {companyInfo.owner}</p>
+                        <div className="flex justify-between p-4 border-b border-gray-200 bg-white items-center">
+                            <span className="font-bold text-gray-500 uppercase text-xs tracking-wider">Total Ongkir</span>
+                            <span className="font-black text-xl text-gray-800">{formatCurrency(stats.totalOngkir)}</span>
                         </div>
-                        <div className="text-center italic text-gray-500 text-xs py-2 border-t border-gray-100">
-                            "Terima kasih atas kepercayaan dan kerjasama Anda kepada kami."
+                        <div className="flex justify-between p-4 border-b border-gray-200 bg-red-50 text-red-600 items-center">
+                            <span className="font-bold uppercase text-xs tracking-wider">Fee Agen</span>
+                            <span className="font-black text-xl">({formatCurrency(stats.totalFee)})</span>
                         </div>
-                    </div>
-
-                    {/* --- SIGNATURES --- */}
-                    <div className="flex justify-between items-end px-8 mt-auto">
-                        <div className="text-center">
-                            <p className="mb-16 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Diterima Oleh</p>
-                            <p className="font-bold border-t border-gray-300 pt-2 min-w-[120px] text-xs uppercase">Mitra: {agentName || '-'}</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="mb-16 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hormat Kami</p>
-                            <p className="font-bold border-t border-gray-300 pt-2 min-w-[120px] text-xs">{companyInfo.name}</p>
+                        <div className="flex justify-between p-6 bg-gray-900 text-white items-center">
+                            <span className="font-bold opacity-80 uppercase text-sm tracking-widest">Total Bayar</span>
+                            <span className="font-black text-4xl">{formatCurrency(stats.totalPayment)}</span>
                         </div>
                     </div>
                 </div>
-
-                {/* Subsequent Pages: Grid Orders */}
-                {pages.map((pageItems, pageIndex) => (
-                <div key={pageIndex} className="relative flex flex-col page-break box-border overflow-hidden bg-white" style={{ width: '210mm', height: '296mm', padding: '10mm 12mm 15mm 12mm' }}>
-                    <div className="border-b-2 border-gray-200 pb-2 mb-3 flex justify-between items-end h-[15mm] shrink-0"><div><h2 className="font-black text-gray-800 text-xl leading-none uppercase tracking-tight">DETAIL KETERANGAN ORDER</h2><p className="text-xs font-medium text-gray-500 mt-1 uppercase tracking-wide">{agentName || '-'} • {month}</p></div><div className="text-right"><span className="bg-gray-100 px-3 py-1 rounded-full text-[10px] font-bold text-gray-600 border border-gray-200">Halaman {pageIndex + 1} dari {pages.length}</span></div></div>
-                    <div className="flex-1 grid grid-cols-3 grid-rows-3 gap-3 h-full">
-                        {pageItems.map((item, idx) => <GridOrderCard key={item.id} item={item} index={idx} globalIndex={(pageIndex * ITEMS_PER_PAGE) + idx} />)}
-                        {Array.from({ length: 9 - pageItems.length }).map((_, i) => <div key={`empty-${i}`} className="border border-gray-100 border-dashed rounded-lg bg-gray-50/30"></div>)}
+                
+                {/* --- BANK & INFO SECTION (Wide) --- */}
+                <div className="mb-8">
+                    <div className="mb-4 border-l-4 border-gray-800 pl-4 py-2 bg-gray-50/50 rounded-r-lg">
+                        <p className="font-bold text-gray-800 text-xs mb-2">REKENING PEMBAYARAN:</p>
+                        <div className="flex flex-wrap gap-x-8 gap-y-2 text-xs font-mono text-gray-600">
+                            {companyInfo.banks.map((b,i)=> (
+                                <div key={i} className="flex items-center gap-2">
+                                    <span className="font-bold text-gray-800">{b.name}</span>
+                                    <span>{b.number}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-2">a.n. {companyInfo.owner}</p>
                     </div>
-                    <div className="text-center text-[9px] text-gray-400 mt-3 font-medium tracking-wider uppercase">Dokumen Lampiran Resmi {companyInfo.name} • Halaman {pageIndex + 2}</div>
+                    <div className="text-center italic text-gray-500 text-xs py-2 border-t border-gray-100">
+                        "Terima kasih atas kepercayaan dan kerjasama Anda kepada kami."
+                    </div>
                 </div>
-                ))}
+
+                {/* --- SIGNATURES --- */}
+                <div className="flex justify-between items-end px-8 mt-auto">
+                    <div className="text-center">
+                        <p className="mb-16 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Diterima Oleh</p>
+                        <p className="font-bold border-t border-gray-300 pt-2 min-w-[120px] text-xs uppercase">Mitra: {agentName || '-'}</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="mb-16 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hormat Kami</p>
+                        <p className="font-bold border-t border-gray-300 pt-2 min-w-[120px] text-xs">{companyInfo.name}</p>
+                    </div>
+                </div>
             </div>
+            {/* Subsequent Pages: Grid Orders */}
+            {pages.map((pageItems, pageIndex) => (
+              <div key={pageIndex} className="bg-white text-black shadow-2xl mb-8 relative flex flex-col print:shadow-none print:mb-0 print:break-after-page box-border overflow-hidden" style={{ width: '210mm', height: '296mm', padding: '10mm 12mm 15mm 12mm' }}>
+                <div className="border-b-2 border-gray-200 pb-2 mb-3 flex justify-between items-end h-[15mm] shrink-0"><div><h2 className="font-black text-gray-800 text-xl leading-none uppercase tracking-tight">DETAIL KETERANGAN ORDER</h2><p className="text-xs font-medium text-gray-500 mt-1 uppercase tracking-wide">{agentName || '-'} • {month}</p></div><div className="text-right"><span className="bg-gray-100 px-3 py-1 rounded-full text-[10px] font-bold text-gray-600 border border-gray-200">Halaman {pageIndex + 1} dari {pages.length}</span></div></div>
+                <div className="flex-1 grid grid-cols-3 grid-rows-3 gap-3 h-full">
+                    {pageItems.map((item, idx) => <GridOrderCard key={item.id} item={item} index={idx} globalIndex={(pageIndex * ITEMS_PER_PAGE) + idx} />)}
+                    {Array.from({ length: 9 - pageItems.length }).map((_, i) => <div key={`empty-${i}`} className="border border-gray-100 border-dashed rounded-lg bg-gray-50/30"></div>)}
+                </div>
+                <div className="text-center text-[9px] text-gray-400 mt-3 font-medium tracking-wider uppercase">Dokumen Lampiran Resmi {companyInfo.name} • Halaman {pageIndex + 2}</div>
+              </div>
+            ))}
         </div>
       </div>
     </div>
@@ -1006,7 +948,7 @@ export default function App() {
       <GlobalStyleInjector mode={display.mode} fontSize={display.fontSize} />
       {notify && <NotificationToast message={notify.message} type={notify.type} onClose={() => setNotify(null)} />}
       {successPopup && <SuccessPopup />}
-      <header className={`sticky top-0 z-30 ${headerStyle} no-print`}>
+      <header className={`sticky top-0 z-30 ${headerStyle}`}>
         <div className="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
            <div className="flex items-center gap-3"><div className="w-12 h-12 md:w-14 md:h-14 flex items-center justify-center">{companyInfo.logo ? <img src={companyInfo.logo} className="w-full h-full object-contain drop-shadow-md" /> : <div className={`p-2 rounded-lg shadow-lg ${isAgent ? 'bg-white/20 text-white' : `${currentTheme.bg} text-white`}`}>{isAgent ? <BadgeCheck className="w-5 h-5 md:w-6 md:h-6"/> : <FileText className="w-5 h-5 md:w-6 md:h-6" />}</div>}</div><div><h1 className="font-black tracking-tight text-lg md:text-xl leading-none uppercase max-w-[200px] truncate">{isAgent ? currentUser.name : "MFG PORTAL"}</h1><p className={`text-[9px] md:text-[10px] font-bold uppercase tracking-widest mt-0.5 ${isAgent ? 'text-white/80' : 'text-gray-500'}`}>{isAgent ? "Mitra Resmi Terdaftar" : "Integrated Management"}</p></div></div>
            <div className="flex gap-2">{currentUser.role === 'admin' && <button onClick={() => setModals({...modals, settings: true})} className={`p-2.5 rounded-xl transition-colors ${display.mode === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}><Settings className="w-5 h-5"/></button>}<button onClick={() => setCurrentUser(null)} className={`p-2.5 rounded-xl transition-colors ${isAgent ? 'text-white hover:bg-white/20' : `text-red-500 ${display.mode === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-red-50'}`}`}><LogOut className="w-5 h-5"/></button></div>
