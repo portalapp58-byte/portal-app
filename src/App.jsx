@@ -160,6 +160,14 @@ const GlobalStyleInjector = ({ mode, fontSize }) => {
       }
       .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
 
+      .pdf-page {
+      page-break-after: always;
+      }
+
+      .pdf-page:last-child {
+      page-break-after: auto;
+      }
+
       @media print {
         @page { size: A4 portrait; margin: 0; }
         body { background: white !important; color: black !important; font-size: 12px !important; }
@@ -482,10 +490,18 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
 
       function executePdf() {
          const element = document.getElementById('report-content');
-         const opt = { margin: 0, filename: `Laporan_${agentName || 'All'}_${month}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
-         window.html2pdf().set(opt).from(element).save().then(() => { if(notify) notify("PDF berhasil diunduh!", "success"); });
-      }
-  };
+         const opt = {
+  margin: 0,
+  filename: `Laporan_${agentName || 'All'}_${month}.pdf`,
+  image: { type: 'jpeg', quality: 0.98 },
+  html2canvas: { scale: 2, useCORS: true },
+  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+
+  pagebreak: {
+    mode: ['css', 'legacy'],
+    before: '.pdf-page'
+  }
+};
 
   const [zoomLevel, setZoomLevel] = useState(0.5);
   const ITEMS_PER_PAGE = 9; 
@@ -507,7 +523,7 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
       <div className="flex-1 w-full overflow-auto p-4 print:p-0 flex flex-col items-center">
         <div id="report-content" style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', width: '210mm' }} className="print:transform-none print:w-full">
             {/* Page 1: Invoice */}
-            <div className="bg-white text-black shadow-2xl mb-8 relative flex flex-col print:shadow-none print:mb-0 print:break-after-page box-border overflow-hidden" style={{ width: '210mm', height: '296mm', padding: '20mm' }}>
+            <div className="pdf-page bg-white text-black shadow-2xl mb-8 relative flex flex-col print:shadow-none print:mb-0 print:break-after-page box-border overflow-hidden" style={{ width: '210mm', height: '296mm', padding: '20mm' }}>
                 <div className="border-b-4 border-double border-gray-900 pb-6 mb-8 text-center h-[40mm] flex flex-col justify-end">
                     {companyInfo.kopSurat ? <img src={companyInfo.kopSurat} className="w-full h-full object-contain object-bottom"/> : <div className="flex flex-col items-center justify-end h-full">{companyInfo.logo && <img src={companyInfo.logo} className="h-16 mb-2 object-contain"/>}<h1 className="text-3xl font-black text-gray-900 tracking-wide leading-none mb-2">{companyInfo.name}</h1><p className="text-sm font-bold text-gray-600 uppercase tracking-[0.2em]">{companyInfo.subname}</p><div className="mt-4 text-xs text-gray-500 font-medium"><p>{companyInfo.address}</p><p>Telp: {companyInfo.phone}</p></div></div>}
                 </div>
@@ -572,7 +588,7 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
             </div>
             {/* Subsequent Pages: Grid Orders */}
             {pages.map((pageItems, pageIndex) => (
-              <div key={pageIndex} className="bg-white text-black shadow-2xl mb-8 relative flex flex-col print:shadow-none print:mb-0 print:break-after-page box-border overflow-hidden" style={{ width: '210mm', height: '296mm', padding: '10mm 12mm 15mm 12mm' }}>
+              <div key={pageIndex} className="pdf-page bg-white text-black shadow-2xl mb-8 relative flex flex-col print:shadow-none print:mb-0 print:break-after-page box-border overflow-hidden" style={{ width: '210mm', height: '296mm', padding: '10mm 12mm 15mm 12mm' }}>
                 <div className="border-b-2 border-gray-200 pb-2 mb-3 flex justify-between items-end h-[15mm] shrink-0"><div><h2 className="font-black text-gray-800 text-xl leading-none uppercase tracking-tight">DETAIL KETERANGAN ORDER</h2><p className="text-xs font-medium text-gray-500 mt-1 uppercase tracking-wide">{agentName || '-'} • {month}</p></div><div className="text-right"><span className="bg-gray-100 px-3 py-1 rounded-full text-[10px] font-bold text-gray-600 border border-gray-200">Halaman {pageIndex + 1} dari {pages.length}</span></div></div>
                 <div className="flex-1 grid grid-cols-3 grid-rows-3 gap-3 h-full">
                     {pageItems.map((item, idx) => <GridOrderCard key={item.id} item={item} index={idx} globalIndex={(pageIndex * ITEMS_PER_PAGE) + idx} />)}
