@@ -481,8 +481,45 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
 
       function executePdf() {
          const element = document.getElementById('report-content');
-         const opt = { margin: 0, filename: `Laporan_${agentName || 'All'}_${month}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
-         window.html2pdf().set(opt).from(element).save().then(() => { if(notify) notify("PDF berhasil diunduh!", "success"); });
+         
+         // 1. Simpan style asli (Zoom level saat ini)
+         const originalStyle = element.style.cssText;
+         
+         // 2. Reset style agar PDF mengambil ukuran asli (A4) tanpa zoom/shrink
+         // Ini akan memperbaiki masalah "Shrink" di HP
+         element.style.width = '210mm';
+         element.style.height = 'auto';
+         element.style.transform = 'none'; // Matikan zoom sementara
+         element.style.margin = '0';
+         element.style.overflow = 'visible';
+
+         // 3. Konfigurasi html2pdf
+         const opt = { 
+             margin: 0, 
+             filename: `Laporan_${agentName || 'All'}_${month}.pdf`, 
+             image: { type: 'jpeg', quality: 0.98 }, 
+             html2canvas: { 
+                 scale: 2, // Resolusi tinggi
+                 useCORS: true, 
+                 scrollY: 0,
+                 windowWidth: 794, // Lebar A4 dalam pixel (96dpi) untuk memaksa layout desktop
+                 backgroundColor: '#ffffff' // FIX: Memaksa background putih untuk mencegah "Blank Hitam"
+             }, 
+             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
+         };
+
+         // 4. Generate & Restore Style
+         window.html2pdf().set(opt).from(element).save()
+             .then(() => { 
+                 // Kembalikan tampilan preview seperti semula (Zoomed) agar user tidak bingung
+                 element.style.cssText = originalStyle;
+                 if(notify) notify("PDF berhasil diunduh!", "success"); 
+             })
+             .catch(err => {
+                 console.error(err);
+                 // Pastikan style kembali meski error
+                 element.style.cssText = originalStyle;
+             });
       }
   };
 
@@ -873,7 +910,7 @@ const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectio
         
         {/* Version Footer */}
         <div className="mt-8 text-center">
-            <p className="text-[9px] text-gray-400 opacity-50">v8.7 (Invoice Customer Added)</p>
+            <p className="text-[9px] text-gray-400 opacity-50">v8.8 (PDF Fixed)</p>
         </div>
         
       </div>
