@@ -122,6 +122,100 @@ const compressImage = (file, maxWidth = 800, quality = 0.6, mimeType = 'image/jp
   });
 };
 
+// --- SOLUSI PRINT "BLANK WHITE" & ROBUST ---
+const handlePrintIsolated = (elementId) => {
+    const content = document.getElementById(elementId);
+    if (!content) return;
+
+    // Cek atau buat iframe print hidden
+    let iframe = document.getElementById("printFrame");
+    if (iframe) {
+        document.body.removeChild(iframe);
+    }
+    
+    iframe = document.createElement("iframe");
+    iframe.id = "printFrame";
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    // Penting untuk mobile: jangan display: none, tapi visibility hidden atau z-index belakang
+    iframe.style.zIndex = "-1"; 
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    
+    // Ambil style global yang ada (kecuali module scripts)
+    const styles = Array.from(document.querySelectorAll("style")).map(s => s.outerHTML).join("");
+    
+    // HTML Template dengan Tailwind CDN dan Script loading handler
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Cetak Dokumen</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <script src="https://cdn.tailwindcss.com"></script>
+            ${styles}
+            <style>
+                /* Force Print Styles */
+                @media print {
+                    @page { size: A4 portrait; margin: 0; }
+                    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                }
+                body { 
+                    background-color: white !important; 
+                    color: black !important; 
+                    margin: 0; 
+                    padding: 0; 
+                }
+                * { color: black !important; text-shadow: none !important; } /* Paksa teks hitam */
+                img { max-width: 100%; display: block; }
+                input, textarea { 
+                    border: none; 
+                    background: transparent; 
+                    font-weight: bold; 
+                    color: black !important; 
+                    resize: none; 
+                    width: 100%;
+                }
+                /* Sembunyikan elemen non-print */
+                .print\\:hidden { display: none !important; }
+            </style>
+        </head>
+        <body>
+            <div id="print-container" style="width: 210mm; min-height: 297mm; background: white; margin: 0 auto; overflow: hidden;">
+                ${content.innerHTML}
+            </div>
+            <script>
+                // Salin value input manual
+                const origInputs = parent.document.getElementById('${elementId}').querySelectorAll('input, textarea');
+                const newInputs = document.querySelectorAll('input, textarea');
+                for(let i=0; i<origInputs.length; i++) {
+                    if(newInputs[i]) newInputs[i].value = origInputs[i].value;
+                }
+
+                // Fungsi trigger print setelah tailwind ready
+                window.onload = function() {
+                    // Beri jeda sedikit agar rendering CSS selesai sempurna
+                    setTimeout(() => {
+                        window.focus();
+                        window.print();
+                    }, 500);
+                };
+            </script>
+        </body>
+        </html>
+    `;
+
+    doc.open();
+    doc.write(htmlContent);
+    doc.close();
+};
+
 const DEFAULT_COMPANY = {
   name: "CV. MALANG FLORIST GROUP",
   subname: "Flower Service & Decoration",
@@ -158,48 +252,6 @@ const GlobalStyleInjector = ({ mode, fontSize }) => {
         20%, 40%, 60%, 80% { transform: translateX(5px); }
       }
       .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
-
-      /* --- FIXED PRINT & PDF STYLES --- */
-      @media print {
-        @page { size: A4 portrait; margin: 0; }
-        
-        /* 1. Sembunyikan SEMUA elemen body */
-        body { 
-            visibility: hidden !important; 
-            background: white !important; 
-            color: black !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-        }
-        
-        /* 2. Hanya tampilkan kontainer laporan */
-        /* Kita gunakan position fixed top-left 0 untuk "mengangkat" elemen ini ke kertas print */
-        #report-content, #customer-invoice {
-            visibility: visible !important;
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 210mm !important;
-            height: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            z-index: 9999 !important; /* Pastikan di paling atas */
-            background: white !important;
-            transform: none !important; /* Matikan zoom saat print */
-            box-shadow: none !important;
-        }
-
-        /* Pastikan elemen anak juga visible */
-        #report-content *, #customer-invoice * {
-            visibility: visible !important;
-        }
-
-        /* Sembunyikan elemen UI yang tidak perlu */
-        .no-print, header, .fixed, button, .settings-modal, .backdrop-blur-sm { 
-            display: none !important; 
-        }
-      }
     `}</style>
   );
 };
@@ -498,9 +550,9 @@ const SettingsModal = ({ onClose, companyInfo, agents, onUpdateCompany, notify, 
 
 // REPORT PREVIEW MODAL
 const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyInfo, notify }) => {
-  const handlePrint = () => window.print();
+  const handlePrint = () => handlePrintIsolated('report-content');
+  
   const handlePdf = () => {
-      // FIX: Ensure script doesn't duplicate and is ready
       if (!window.html2pdf) {
           const script = document.createElement('script');
           script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
@@ -511,49 +563,45 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
       }
 
       function executePdf() {
-         const element = document.getElementById('report-content');
+         const originalElement = document.getElementById('report-content');
          
-         // 1. Simpan style asli (Zoom level saat ini)
-         const originalStyle = element.style.cssText;
+         const element = originalElement.cloneNode(true);
          
-         // 2. Reset style agar PDF mengambil ukuran asli (A4) tanpa zoom/shrink
-         // Ini akan memperbaiki masalah "Shrink" di HP dan "Blank Hitam" di PC
          element.style.width = '210mm';
-         element.style.height = 'auto'; // Allow height to grow
-         element.style.transform = 'none'; // REMOVE ZOOM
+         element.style.height = 'auto'; 
+         element.style.transform = 'none';
          element.style.margin = '0';
-         element.style.overflow = 'visible';
+         element.style.backgroundColor = '#ffffff'; // Force white background
+         element.style.color = '#000000'; // Force black text
          
-         // FIX BLACK PDF ON PC: FORCE WHITE BACKGROUND
-         element.style.backgroundColor = 'white'; 
-         element.style.color = 'black';
+         element.style.position = 'fixed';
+         element.style.left = '-9999px';
+         element.style.top = '0';
+         element.style.zIndex = '10000';
+         
+         document.body.appendChild(element);
 
-         // 3. Konfigurasi html2pdf
          const opt = { 
              margin: 0, 
              filename: `Laporan_${agentName || 'All'}_${month}.pdf`, 
              image: { type: 'jpeg', quality: 0.98 }, 
              html2canvas: { 
-                 scale: 2, // Resolusi tinggi
+                 scale: 2, 
                  useCORS: true, 
-                 scrollY: 0,
-                 windowWidth: 794, // Lebar A4 dalam pixel (96dpi) untuk memaksa layout desktop
-                 backgroundColor: '#ffffff' // FIX: Memaksa background putih untuk mencegah "Blank Hitam"
+                 windowWidth: 794, 
+                 backgroundColor: '#ffffff' // PENTING UNTUK MENCEGAH BLACK SCREEN
              }, 
              jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
          };
 
-         // 4. Generate & Restore Style
          window.html2pdf().set(opt).from(element).save()
              .then(() => { 
-                 // Kembalikan tampilan preview seperti semula (Zoomed) agar user tidak bingung
-                 element.style.cssText = originalStyle;
+                 document.body.removeChild(element); 
                  if(notify) notify("PDF berhasil diunduh!", "success"); 
              })
              .catch(err => {
                  console.error(err);
-                 // Pastikan style kembali meski error
-                 element.style.cssText = originalStyle;
+                 if(document.body.contains(element)) document.body.removeChild(element);
              });
       }
   };
@@ -660,7 +708,6 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
 
 // --- MODAL INVOICE KHUSUS CUSTOMER (HEADER MITRA) - REDESIGNED MODERN A4 ---
 const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
-  // State untuk data toko mitra (disimpan di LocalStorage)
   const [shopProfile, setShopProfile] = useState(() => {
     const saved = localStorage.getItem('mitra_shop_profile');
     return saved ? JSON.parse(saved) : {
@@ -674,9 +721,8 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
 
   const [sellingPrice, setSellingPrice] = useState(order.totalPayment); 
   const [customerName, setCustomerName] = useState('Pelanggan Yth');
-  const [zoomLevel, setZoomLevel] = useState(0.5); // Untuk responsive zoom
+  const [zoomLevel, setZoomLevel] = useState(0.5); 
 
-  // Responsive Zoom Scale Logic
   useEffect(() => {
     const handleResize = () => setZoomLevel(Math.min((window.innerWidth - 32) / 820, 1));
     handleResize(); 
@@ -698,7 +744,7 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
     }
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => handlePrintIsolated('customer-invoice');
   
   const handlePdf = () => {
       if (!window.html2pdf) {
@@ -710,20 +756,28 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
           executePdf();
       }
       function executePdf() {
-          const element = document.getElementById('customer-invoice');
+          const originalElement = document.getElementById('customer-invoice');
           
-          // 1. Reset Zoom for Full Resolution
-          const originalStyle = element.style.cssText;
+          const element = originalElement.cloneNode(true);
+          
           element.style.width = '210mm';
-          element.style.height = '297mm'; // A4 Height fix
+          element.style.height = '297mm'; 
+          element.style.padding = '15mm';
           element.style.transform = 'none';
           element.style.margin = '0';
+          element.style.backgroundColor = '#ffffff'; 
+          element.style.color = '#000000';
           
-          // FIX BLACK PDF ON PC: FORCE WHITE BACKGROUND
-          element.style.backgroundColor = 'white'; 
-          element.style.color = 'black';
+          element.style.position = 'fixed';
+          element.style.left = '-9999px';
+          element.style.top = '0';
+          element.style.zIndex = '10000';
           
-          // 2. Generate Filename: Invoice_NamaCustomer_Tanggal.pdf
+          const hints = element.querySelectorAll('.print\\:hidden');
+          hints.forEach(el => el.remove());
+
+          document.body.appendChild(element);
+          
           const safeName = customerName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
           const dateStr = new Date(order.date).toLocaleDateString('id-ID').replace(/\//g, '-');
           const filename = `Invoice_${safeName}_${dateStr}.pdf`;
@@ -732,13 +786,19 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
               margin: 0, 
               filename: filename, 
               image: { type: 'jpeg', quality: 0.98 }, 
-              html2canvas: { scale: 2, useCORS: true, windowWidth: 794, backgroundColor: '#ffffff' }, 
+              html2canvas: { scale: 2, useCORS: true, windowWidth: 794, backgroundColor: '#ffffff' }, // FIX BLACK SCREEN
               jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
           };
           
           window.html2pdf().set(opt).from(element).save()
-            .then(() => { element.style.cssText = originalStyle; if(notify) notify("Invoice disimpan!", "success"); })
-            .catch(err => { element.style.cssText = originalStyle; console.error(err); });
+            .then(() => { 
+                document.body.removeChild(element); 
+                if(notify) notify("Invoice disimpan!", "success"); 
+            })
+            .catch(err => { 
+                console.error(err); 
+                if(document.body.contains(element)) document.body.removeChild(element);
+            });
       }
   };
 
@@ -893,140 +953,6 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
   );
 };
 
-// LOGIN SCREEN
-const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectionStatus }) => {
-  const [activeTab, setActiveTab] = useState('mitra');
-  const [inputCode, setInputCode] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const isMounted = useRef(true);
-
-  useEffect(() => { return () => { isMounted.current = false; }; }, []);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    if (!inputCode.trim()) { setError("Mohon isi kode terlebih dahulu"); return; }
-    
-    setLoading(true);
-
-    try {
-        const code = inputCode.trim();
-        
-        // 1. ADMIN LOGIN (Immediate Check)
-        const validAdminPin = adminPin || "123456";
-        if (activeTab === 'admin') {
-            if (code === validAdminPin) {
-                onLogin({ role: 'admin', name: 'Admin Pusat' });
-                return; // Component will unmount
-            } else {
-                throw new Error("PIN Salah!");
-            }
-        }
-
-        // 2. MITRA LOGIN
-        // A. Cek di data yang sudah ter-load (Synchronous)
-        let agent = agents.find(a => String(a.code).trim().toLowerCase() === code.toLowerCase());
-        
-        if (agent) {
-             onLogin({ ...agent, role: 'agent' });
-             return;
-        }
-
-        // B. Coba fetch ke DB (Asynchronous dengan Timeout)
-        // Promise Race: Fetch vs Timeout
-        const fetchPromise = (async () => {
-             // Try lowercase
-             let collRef = getCollection('agents');
-             let snap = await getDocs(collRef);
-             if(snap.empty) {
-                 collRef = getCollection('Agents', true);
-                 snap = await getDocs(collRef);
-             }
-             return snap.docs.map(d => ({id: d.id, ...d.data(), code: d.data().code || d.data().Code || d.data().kode || d.data().Kode || d.data().KODE }));
-        })();
-
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Timeout")), 5000)
-        );
-
-        try {
-            const remoteAgents = await Promise.race([fetchPromise, timeoutPromise]);
-            agent = remoteAgents.find(a => String(a.code).trim().toLowerCase() === code.toLowerCase());
-        } catch (err) {
-            console.error("Remote check failed:", err);
-        }
-
-        if (agent) {
-            onLogin({ ...agent, role: 'agent' });
-        } else {
-            throw new Error("Kode Tidak Ditemukan");
-        }
-
-    } catch (err) {
-        console.error("Login Error:", err);
-        setError(err.message || "Gagal Login");
-        setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-[100dvh] bg-slate-50 flex flex-col items-center justify-center p-4 font-sans relative overflow-hidden supports-[min-h:100dvh]:min-h-[100dvh]">
-      {/* Background Blobs - Adjusted for mobile */}
-      <div className="absolute top-[-10%] right-[-20%] w-[80%] h-[60%] bg-blue-200/40 rounded-full blur-[80px] md:blur-[100px]"></div>
-      <div className="absolute bottom-[-10%] left-[-20%] w-[80%] h-[60%] bg-emerald-200/40 rounded-full blur-[80px] md:blur-[100px]"></div>
-      
-      {/* CASPER BACKGROUND IMAGE - MASSIVE SIZE on Left */}
-      <img 
-        src="https://pngimg.com/uploads/casper/casper_PNG6.png" 
-        alt="Casper Background"
-        className="absolute top-1/2 left-[-50%] md:left-[-15%] transform -translate-y-1/2 h-[110vh] md:h-[120vh] w-auto opacity-15 pointer-events-none z-0 animate-pulse object-contain transition-all duration-500"
-        style={{ animationDuration: '4s' }}
-      />
-
-      <div className="w-full max-w-[350px] z-10 animate-in fade-in zoom-in duration-500 relative">
-        <div className="text-center mb-6">
-          <div className="w-24 h-24 md:w-28 md:h-28 flex items-center justify-center mx-auto -mb-2 translate-y-3 relative z-10">{companyLogo ? <img src={companyLogo} className="w-full h-full object-contain drop-shadow-2xl"/> : <div className="w-14 h-14 md:w-16 md:h-16 bg-white rounded-xl flex items-center justify-center shadow-lg"><FileText className="w-7 h-7 md:w-8 md:h-8 text-black" /></div>}</div>
-          <h1 className="text-2xl md:text-4xl font-black text-gray-900 tracking-widest mt-0 relative z-0 drop-shadow-sm whitespace-nowrap">MFG PORTAL</h1>
-          <p className="text-[9px] md:text-[10px] font-bold text-emerald-600 uppercase tracking-[0.2em] mt-1 bg-emerald-50 inline-block px-2 py-0.5 rounded-full border border-emerald-100">Integrated Management System</p>
-        </div>
-        
-        {/* Connection Status Indicator */}
-        <div className={`mb-4 flex flex-col items-center justify-center gap-1`}>
-            <div className={`flex items-center gap-2 text-[10px] font-bold px-3 py-1.5 rounded-full border bg-emerald-50 text-emerald-600 border-emerald-200`}>
-                <Wifi className="w-3 h-3"/>
-                <span>{connectionStatus}</span>
-            </div>
-        </div>
-
-        <div className={`bg-white/90 backdrop-blur-md border-2 ${error ? 'border-red-500 animate-shake' : 'border-emerald-500/30'} rounded-xl shadow-2xl overflow-hidden p-4 transition-all`}>
-          <div className="flex bg-emerald-50/50 p-1 rounded-xl mb-6 gap-2"><button onClick={() => { setActiveTab('mitra'); setInputCode(""); setError(""); }} className={`flex-1 py-3 md:py-4 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${activeTab === 'mitra' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' : 'text-emerald-700 hover:bg-emerald-100 bg-emerald-50/50'}`}>Mitra</button><button onClick={() => { setActiveTab('admin'); setInputCode(""); setError(""); }} className={`flex-1 py-3 md:py-4 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${activeTab === 'admin' ? 'bg-gray-800 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100 bg-gray-50'}`}>Admin</button></div>
-          <form onSubmit={handleSubmit} className="pb-2">
-              <div className="relative mb-2">
-                  <input type={activeTab === 'admin' ? "password" : "text"} value={inputCode} onChange={(e) => { setInputCode(e.target.value); setError(""); }} className={`block w-full py-4 bg-gray-100 border ${error ? 'border-red-500 bg-red-50' : 'border-gray-200'} rounded-xl text-center text-lg font-black text-gray-800 placeholder-gray-400 focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all uppercase tracking-[0.2em] shadow-inner`} placeholder={activeTab === 'mitra' ? "KODE" : "PIN"} autoFocus />
-              </div>
-              {error && (<div className="flex items-center justify-center gap-2 text-red-500 mb-4 animate-in fade-in slide-in-from-top-1"><XCircle className="w-4 h-4" /><p className="text-xs font-bold">{error}</p></div>)}
-              {!error && (
-                  <div className="text-center mb-6">
-                      <p className="text-[10px] text-gray-400 font-medium italic">
-                          {activeTab === 'mitra' ? 'Masukkan Kode Akses Mitra' : 'Masukkan PIN Keamanan Admin'}
-                      </p>
-                  </div>
-              )}
-              <button disabled={loading} className={`w-full py-3.5 rounded-xl text-xs font-black shadow-lg transform active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${activeTab === 'mitra' ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-200' : 'bg-gray-900 hover:bg-black text-white'}`}>{loading ? <Loader2 className="w-4 h-4 animate-spin"/> : 'MASUK KE SISTEM'}</button>
-          </form>
-        </div>
-        
-        {/* Version Footer */}
-        <div className="mt-8 text-center">
-            <p className="text-[9px] text-gray-400 opacity-50">v9.2 (PC Print & PDF Fixed)</p>
-        </div>
-        
-      </div>
-    </div>
-  );
-};
-
 // --- 6. MAIN APP ---
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -1045,7 +971,6 @@ export default function App() {
   const [connectionStatus, setConnectionStatus] = useState('Loading...');
   const [dashboardReady, setDashboardReady] = useState(false);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState(null);
-  // NEW STATE FOR YEAR SELECTOR
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const currentTheme = THEMES[display?.theme] || THEMES.emerald;
@@ -1054,185 +979,92 @@ export default function App() {
   useEffect(() => {
     const init = async () => {
         try {
-            // Attempt Anonymous Sign In
             await signInAnonymously(auth).catch((e) => {
                 console.error("Auth Failed:", e);
                 setConnectionStatus("Auth Failed");
             });
-            
             setConnectionStatus("Terhubung (Memuat Data...)");
 
-            // Listeners
             const unsubscribeAgents = onSnapshot(getCollection('agents'), (s) => { 
-                console.log("Agents snapshot received. Count:", s.size);
                 const fetchedAgents = s.docs.map(d => {
                     const data = d.data();
-                    // Smart Mapping to handle inconsistent capitalization
-                    return {
-                        id: d.id,
-                        ...data,
-                        code: data.code || data.Code || data.kode || data.Kode || data.KODE
-                    };
+                    return { id: d.id, ...data, code: data.code || data.Code || data.kode || data.Kode || data.KODE };
                 });
                 
                 if (fetchedAgents.length === 0 && !localStorage.getItem('mfg_seeded')) { 
-                   try {
-                     addDoc(getCollection('agents'), { name: "Mitra A (Contoh)", code: "A001", createdAt: serverTimestamp() }); 
-                     localStorage.setItem('mfg_seeded', 'true'); 
-                   } catch(err) {
-                       console.warn("Seeding failed (permission denied?), ignoring.", err);
-                   }
+                   try { addDoc(getCollection('agents'), { name: "Mitra A (Contoh)", code: "A001", createdAt: serverTimestamp() }); localStorage.setItem('mfg_seeded', 'true'); } catch(err) { console.warn("Seeding failed", err); }
                 } 
                 setAgents(fetchedAgents); 
-                
-                if (fetchedAgents.length > 0) {
-                    setConnectionStatus("Siap Digunakan");
-                } else {
-                    setConnectionStatus("Data Kosong");
-                }
+                if (fetchedAgents.length > 0) setConnectionStatus("Siap Digunakan"); else setConnectionStatus("Data Kosong");
+            }, (error) => { console.error(error); setConnectionStatus("Permission Denied"); });
 
-            }, (error) => {
-                console.error("Agents Snapshot Error:", error);
-                setConnectionStatus("Permission Denied");
-            });
-
-            onSnapshot(getDocRef('settings_company', 'main'), (d) => { 
-                if(d.exists()) setCompanyInfo(d.data()); 
-            }, (e) => console.log("Company info read error (ignorable for demo)", e));
-
-            onSnapshot(getCollection('monthly_status'), (s) => { 
-                const statusMap = {}; 
-                s.docs.forEach(d => { statusMap[d.id] = d.data().status; }); 
-                setMonthlyStatus(statusMap); 
-            }, (e) => console.log("Monthly status read error", e));
+            onSnapshot(getDocRef('settings_company', 'main'), (d) => { if(d.exists()) setCompanyInfo(d.data()); });
+            onSnapshot(getCollection('monthly_status'), (s) => { const statusMap = {}; s.docs.forEach(d => { statusMap[d.id] = d.data().status; }); setMonthlyStatus(statusMap); });
             
-            return () => {
-                unsubscribeAgents();
-            };
-
-        } catch (error) {
-            console.error("Firebase Init General Error:", error);
-            setConnectionStatus("Connection Error");
-        }
+            return () => unsubscribeAgents();
+        } catch (error) { console.error(error); setConnectionStatus("Connection Error"); }
     }; 
     init();
   }, []);
 
   useEffect(() => { 
       if (!currentUser) return; 
-      
       const q = query(getCollection('orders'));
       const unsub = onSnapshot(q, (s) => { 
-          // SANITIZE DATA TO PREVENT CRASHES
           const d = s.docs.map(d => {
               const data = d.data();
-              return { 
-                  id: d.id, 
-                  ...data,
-                  // Ensure numeric values are numbers
-                  price: parseFloat(data.price) || 0,
-                  shipping: parseFloat(data.shipping) || 0,
-                  fee: parseFloat(data.fee) || 0,
-                  totalPayment: parseFloat(data.totalPayment) || 0
-              };
-          }).filter(item => {
-              // Filter out bad dates
-              return item.date && !isNaN(new Date(item.date).getTime());
-          });
-
+              return { id: d.id, ...data, price: parseFloat(data.price)||0, shipping: parseFloat(data.shipping)||0, fee: parseFloat(data.fee)||0, totalPayment: parseFloat(data.totalPayment)||0 };
+          }).filter(item => item.date && !isNaN(new Date(item.date).getTime()));
           d.sort((a, b) => new Date(b.date) - new Date(a.date)); 
           setOrders(d); 
-      }, (err) => {
-          console.error("Orders Snapshot Error:", err);
       });
       return () => unsub();
   }, [currentUser]);
 
-  // Dashboard Ready Effect
-  useEffect(() => {
-      if (currentUser) {
-          // Simulate loading delay for smooth transition
-          const timer = setTimeout(() => setDashboardReady(true), 500);
-          return () => clearTimeout(timer);
-      } else {
-          setDashboardReady(false);
-      }
-  }, [currentUser]);
+  useEffect(() => { if (currentUser) { const timer = setTimeout(() => setDashboardReady(true), 500); return () => clearTimeout(timer); } else { setDashboardReady(false); } }, [currentUser]);
 
   const handleSaveOrder = async (d) => { 
       try { 
-          if (d.id) { 
-              const { id, ...data } = d; 
-              await updateDoc(getDocRef('orders', id), data); 
-              showNotify("Data diperbarui!"); 
-          } else { 
-              await addDoc(getCollection('orders'), d); 
-              showNotify("Data tersimpan!"); 
-          } 
+          if (d.id) { const { id, ...data } = d; await updateDoc(getDocRef('orders', id), data); showNotify("Data diperbarui!"); } 
+          else { await addDoc(getCollection('orders'), d); showNotify("Data tersimpan!"); } 
           setModals({...modals, add: false}); setEditingOrder(null); setSuccessPopup(true); setTimeout(() => setSuccessPopup(false), 1500); 
-      } catch (err) { console.error(err); showNotify("Gagal menyimpan (File Terlalu Besar atau Permission Error)", "error"); } 
+      } catch (err) { showNotify("Gagal menyimpan", "error"); } 
   };
   
-  const handleDeleteOrder = async (id) => { 
-      if (confirm("Hapus?")) { 
-          await deleteDoc(getDocRef('orders', id)); 
-          showNotify("Terhapus"); 
-      } 
-  };
-
+  const handleDeleteOrder = async (id) => { if (confirm("Hapus?")) { await deleteDoc(getDocRef('orders', id)); showNotify("Terhapus"); } };
   const handleEditOrder = (order) => { setEditingOrder(order); setModals({...modals, add: true}); };
   const filteredOrders = useMemo(() => { if (!currentUser) return []; let res = orders; if (currentUser.role === 'agent') res = res.filter(o => o.agentId === currentUser.id); else if (selectedAgentId !== 'all') res = res.filter(o => o.agentId === selectedAgentId); return res; }, [orders, currentUser, selectedAgentId]);
   
-  // SAFE FOLDER CALCULATION
   const folders = useMemo(() => { 
       try {
-        const currentYear = selectedYear; // <--- UPDATED: USE SELECTED YEAR STATE
-        const allMonths = []; const groups = {}; 
+        const currentYear = selectedYear; const allMonths = []; const groups = {}; 
         filteredOrders.forEach(o => { 
-            const mKey = o.monthKey; 
-            if (!mKey) return; // Skip invalid keys
+            const mKey = o.monthKey; if (!mKey) return; 
             if (!groups[mKey]) groups[mKey] = { count: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0, totalHarga: 0 }; 
-            groups[mKey].count += 1; 
-            groups[mKey].totalFee += o.fee; 
-            groups[mKey].totalOngkir += o.shipping; 
-            groups[mKey].totalPayment += o.totalPayment; 
-            groups[mKey].totalHarga += o.price; 
+            groups[mKey].count += 1; groups[mKey].totalFee += o.fee; groups[mKey].totalOngkir += o.shipping; groups[mKey].totalPayment += o.totalPayment; groups[mKey].totalHarga += o.price; 
         }); 
         for (let i = 0; i < 12; i++) { 
-            const monthNum = String(i + 1).padStart(2, '0'); 
-            const key = `${currentYear}-${monthNum}`; 
+            const monthNum = String(i + 1).padStart(2, '0'); const key = `${currentYear}-${monthNum}`; 
             allMonths.push({ key: key, stats: groups[key] || { count: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0, totalHarga: 0 } }); 
         } 
         return allMonths; 
-      } catch (e) {
-          console.error("Folder calculation error", e);
-          return [];
-      }
-  }, [filteredOrders, selectedYear]); // <--- DEPENDENCY UPDATED
+      } catch (e) { return []; }
+  }, [filteredOrders, selectedYear]);
 
-  // SAFE CURRENT MONTH STATS
   const currentMonthStats = useMemo(() => { 
       try {
         const now = new Date(); const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; 
         const currentOrders = filteredOrders.filter(o => o.monthKey === currentMonthKey); 
         return currentOrders.reduce((acc, o) => ({ count: acc.count + 1, totalHarga: acc.totalHarga + o.price, totalFee: acc.totalFee + o.fee, totalOngkir: acc.totalOngkir + o.shipping, totalPayment: acc.totalPayment + o.totalPayment }), { count: 0, totalHarga: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0 }); 
-      } catch(e) {
-          console.error("Stats calculation error", e);
-          return { count: 0, totalHarga: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0 };
-      }
+      } catch(e) { return { count: 0, totalHarga: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0 }; }
   }, [filteredOrders]);
   
   const toggleMonthStatus = async (monthKey) => { 
       if(currentUser.role !== 'admin') return; 
       const targetAgentId = currentUser.role === 'agent' ? currentUser.id : selectedAgentId; 
-      if(targetAgentId === 'all') { showNotify("Pilih Mitra spesifik untuk ubah status!", "error"); return; } 
-      
-      const docId = `status_${monthKey}_${targetAgentId}`; 
-      const currentStatus = monthlyStatus[docId] || 'belum'; 
-      const newStatus = currentStatus === 'lunas' ? 'belum' : 'lunas'; 
-
-      await setDoc(getDocRef('monthly_status', docId), { monthKey, agentId: targetAgentId, status: newStatus, updatedAt: serverTimestamp() }); 
-      showNotify(`Status: ${newStatus.toUpperCase()}`); 
+      if(targetAgentId === 'all') { showNotify("Pilih Mitra spesifik!", "error"); return; } 
+      const docId = `status_${monthKey}_${targetAgentId}`; const currentStatus = monthlyStatus[docId] || 'belum'; const newStatus = currentStatus === 'lunas' ? 'belum' : 'lunas'; 
+      await setDoc(getDocRef('monthly_status', docId), { monthKey, agentId: targetAgentId, status: newStatus, updatedAt: serverTimestamp() }); showNotify(`Status: ${newStatus.toUpperCase()}`); 
   };
   
   const getStatus = (monthKey) => { const targetAgentId = currentUser.role === 'agent' ? currentUser.id : selectedAgentId; if(targetAgentId === 'all') return 'mixed'; return monthlyStatus[`status_${monthKey}_${targetAgentId}`] || 'belum'; };
@@ -1243,15 +1075,7 @@ export default function App() {
 
   if (!currentUser) return <LoginScreen onLogin={setCurrentUser} agents={agents} adminPin={companyInfo.adminPin} notify={showNotify} companyLogo={companyInfo.logo} connectionStatus={connectionStatus} />;
 
-  // LOADING DASHBOARD STATE (Prevents blank screen)
-  if (!dashboardReady) {
-      return (
-          <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-gray-50">
-              <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-4" />
-              <p className="text-gray-500 font-bold text-xs tracking-widest uppercase animate-pulse">Memuat Dashboard...</p>
-          </div>
-      );
-  }
+  if (!dashboardReady) return <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-gray-50"><Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-4" /><p className="text-gray-500 font-bold text-xs tracking-widest uppercase animate-pulse">Memuat Dashboard...</p></div>;
 
   return (
     <div className={`min-h-[100dvh] font-sans pb-32 transition-colors duration-300 supports-[min-h:100dvh]:min-h-[100dvh] ${display.mode === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
@@ -1352,3 +1176,59 @@ export default function App() {
     </div>
   );
 }
+
+// Komponen LoginScreen harus ditambahkan kembali jika Anda tidak punya kode ini di file lain.
+// Jika di file sebelumnya ada, pastikan untuk include. 
+// Asumsi: Kode LoginScreen Anda sudah ada di tempat lain atau di bawah file ini.
+// Berikut adalah basic placeholder jika diperlukan:
+const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectionStatus }) => {
+    const [mode, setMode] = useState('agent'); // agent | admin
+    const [code, setCode] = useState('');
+    
+    const handleLogin = (e) => {
+        e.preventDefault();
+        if (mode === 'admin') {
+            if (code === adminPin) {
+                onLogin({ name: 'Administrator', role: 'admin', id: 'admin' });
+            } else {
+                notify("PIN Salah!", "error");
+            }
+        } else {
+            const agent = agents.find(a => a.code === code.toUpperCase());
+            if (agent) {
+                onLogin({ name: agent.name, role: 'agent', id: agent.id });
+            } else {
+                notify("KODE Mitra Tidak Ditemukan!", "error");
+            }
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 font-sans">
+            <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+                {companyLogo ? <img src={companyLogo} className="h-20 mx-auto mb-4 object-contain"/> : <div className="w-20 h-20 bg-emerald-500 rounded-xl mx-auto mb-4 flex items-center justify-center text-white"><FileText className="w-10 h-10"/></div>}
+                <h1 className="text-2xl font-black text-gray-800 mb-1">PORTAL MFG</h1>
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-8">Integrated System</p>
+                
+                <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
+                    <button onClick={()=>setMode('agent')} className={`flex-1 py-2 text-xs font-bold uppercase rounded-md transition-all ${mode==='agent' ? 'bg-white shadow text-emerald-600' : 'text-gray-400'}`}>Mitra</button>
+                    <button onClick={()=>setMode('admin')} className={`flex-1 py-2 text-xs font-bold uppercase rounded-md transition-all ${mode==='admin' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}>Admin</button>
+                </div>
+
+                <form onSubmit={handleLogin} className="space-y-4">
+                    <input 
+                        type={mode === 'admin' ? 'password' : 'text'} 
+                        placeholder={mode === 'admin' ? 'PIN ADMIN' : 'KODE MITRA (Ex: A001)'}
+                        className="w-full p-4 border border-gray-300 rounded-xl text-center font-bold text-lg outline-none focus:border-emerald-500 uppercase placeholder:normal-case placeholder:font-normal placeholder:text-sm"
+                        value={code}
+                        onChange={(e)=>setCode(e.target.value)}
+                    />
+                    <button type="submit" className={`w-full py-4 rounded-xl font-black text-white shadow-lg transition-transform active:scale-95 ${mode==='admin' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}>
+                        MASUK SISTEM
+                    </button>
+                </form>
+                <p className="text-[10px] text-gray-400 mt-8">Status: {connectionStatus}</p>
+            </div>
+        </div>
+    );
+};
