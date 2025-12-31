@@ -9,7 +9,7 @@ import {
   Folder, ArrowLeft, CheckSquare, XSquare, Sun, Filter,
   Wallet, Truck, Percent, ShoppingBag, Camera, Pencil,
   BadgeCheck, TrendingUp, XCircle, Menu, WifiOff, Wifi,
-  Database, Info, Bug, Terminal, Activity
+  Database, Info, Bug, Terminal, Activity, ChevronLeft, ChevronRight // <--- TAMBAHAN IMPORT ICON
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -910,7 +910,7 @@ const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectio
         
         {/* Version Footer */}
         <div className="mt-8 text-center">
-            <p className="text-[9px] text-gray-400 opacity-50">v8.8 (PDF Fixed)</p>
+            <p className="text-[9px] text-gray-400 opacity-50">v8.9 (Year Selector Added)</p>
         </div>
         
       </div>
@@ -936,6 +936,8 @@ export default function App() {
   const [connectionStatus, setConnectionStatus] = useState('Loading...');
   const [dashboardReady, setDashboardReady] = useState(false);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState(null);
+  // NEW STATE FOR YEAR SELECTOR
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const currentTheme = THEMES[display?.theme] || THEMES.emerald;
   const showNotify = (msg, type='success') => { setNotify({ message: msg, type }); setTimeout(() => setNotify(null), 3000); };
@@ -1075,7 +1077,8 @@ export default function App() {
   // SAFE FOLDER CALCULATION
   const folders = useMemo(() => { 
       try {
-        const currentYear = new Date().getFullYear(); const allMonths = []; const groups = {}; 
+        const currentYear = selectedYear; // <--- UPDATED: USE SELECTED YEAR STATE
+        const allMonths = []; const groups = {}; 
         filteredOrders.forEach(o => { 
             const mKey = o.monthKey; 
             if (!mKey) return; // Skip invalid keys
@@ -1096,7 +1099,7 @@ export default function App() {
           console.error("Folder calculation error", e);
           return [];
       }
-  }, [filteredOrders]);
+  }, [filteredOrders, selectedYear]); // <--- DEPENDENCY UPDATED
 
   // SAFE CURRENT MONTH STATS
   const currentMonthStats = useMemo(() => { 
@@ -1155,7 +1158,35 @@ export default function App() {
       <main className="max-w-4xl mx-auto px-4 py-6">
         {isAgent && viewMode === 'folders' && (<div className={`mb-8 rounded-2xl p-6 shadow-lg text-white bg-gradient-to-br ${getAgentGradient(currentUser.name)} relative overflow-hidden`}><div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div><div className="relative z-10"><div className="flex justify-between items-start mb-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70 mb-1">Tagihan Periode Bulan Ini</p><h2 className="text-xl md:text-2xl font-black uppercase tracking-wide">{new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</h2></div><div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm"><TrendingUp className="w-6 h-6 text-white"/></div></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-white/20"><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">Total Order</p><p className="text-lg font-bold">{currentMonthStats.count} Unit</p></div><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">TOTAL HARGA</p><p className="text-lg font-bold">{formatCurrency(currentMonthStats.totalHarga)}</p></div><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">Total Fee</p><p className="text-lg font-bold">{formatCurrency(currentMonthStats.totalFee)}</p></div><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">Tagihan Bersih</p><p className="text-xl font-black">{formatCurrency(currentMonthStats.totalPayment)}</p></div></div></div></div>)}
         {currentUser.role === 'admin' && viewMode === 'folders' && (<div className="mb-6 card p-4 rounded-xl shadow-sm border border-gray-200/60"><label className="text-[10px] font-bold opacity-50 uppercase ml-1 mb-1 block tracking-wider">Filter Data Mitra</label><div className="relative"><select value={selectedAgentId} onChange={(e) => { setSelectedAgentId(e.target.value); setViewMode('folders'); }} className="input-field w-full p-3 pl-4 pr-10 rounded-lg font-bold text-sm appearance-none outline-none cursor-pointer"><option value="all">-- Semua Data Mitra (Global) --</option>{agents.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"/></div></div>)}
-        {viewMode === 'folders' && (<div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">{currentUser.role === 'admin' && selectedAgentId === 'all' ? (<div className="text-center py-20 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 bg-gray-50 flex flex-col items-center justify-center"><Filter className="w-10 h-10 mb-3 text-gray-300"/><p className="font-bold text-sm">Arsip Belum Tersedia</p><p className="text-xs mt-1">Silakan pilih Mitra dari menu filter di atas untuk melihat arsip laporan bulanan.</p></div>) : (<><h2 className="text-sm font-black text-gray-400 uppercase tracking-widest px-1 flex items-center gap-2"><Folder className="w-4 h-4"/> Arsip Laporan Bulanan</h2><div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-20">{folders.map(f => (<FolderCard key={f.key} monthKey={f.key} stats={f.stats} status={getStatus(f.key)} isAdmin={currentUser.role === 'admin'} onToggleStatus={() => toggleMonthStatus(f.key)} onClick={() => { setSelectedMonth(f.key); setViewMode('orders'); }}/>))}</div></>)}</div>)}
+        
+        {/* YEAR SELECTOR UI (ADDED FEATURE) */}
+        {viewMode === 'folders' && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                <div className="flex justify-between items-center mb-2 px-1">
+                    <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Folder className="w-4 h-4"/> Arsip Laporan</h2>
+                    <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 shadow-sm">
+                        <button onClick={() => setSelectedYear(y => y - 1)} className="p-1 hover:bg-gray-100 rounded text-gray-500"><ChevronLeft className="w-4 h-4"/></button>
+                        <span className="text-xs font-black text-gray-800 w-10 text-center">{selectedYear}</span>
+                        <button onClick={() => setSelectedYear(y => y + 1)} className="p-1 hover:bg-gray-100 rounded text-gray-500"><ChevronRight className="w-4 h-4"/></button>
+                    </div>
+                </div>
+
+                {currentUser.role === 'admin' && selectedAgentId === 'all' ? (
+                    <div className="text-center py-20 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 bg-gray-50 flex flex-col items-center justify-center">
+                        <Filter className="w-10 h-10 mb-3 text-gray-300"/>
+                        <p className="font-bold text-sm">Arsip Belum Tersedia</p>
+                        <p className="text-xs mt-1">Silakan pilih Mitra dari menu filter di atas untuk melihat arsip laporan bulanan.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-20">
+                        {folders.map(f => (
+                            <FolderCard key={f.key} monthKey={f.key} stats={f.stats} status={getStatus(f.key)} isAdmin={currentUser.role === 'admin'} onToggleStatus={() => toggleMonthStatus(f.key)} onClick={() => { setSelectedMonth(f.key); setViewMode('orders'); }}/>
+                        ))}
+                    </div>
+                )}
+            </div>
+        )}
+
         {viewMode === 'orders' && (
             <div className="animate-in slide-in-from-right-8 pb-20">
                 <button onClick={() => setViewMode('folders')} className="mb-4 flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-black transition-colors px-1"><ArrowLeft className="w-4 h-4"/> KEMBALI KE FOLDER</button>
