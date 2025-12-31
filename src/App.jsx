@@ -161,13 +161,38 @@ const GlobalStyleInjector = ({ mode, fontSize }) => {
 
       @media print {
         @page { size: A4 portrait; margin: 0; }
-        body { background: white !important; color: black !important; font-size: 12px !important; }
+        /* Hide everything by default */
+        body * { visibility: hidden; }
+        
+        /* Unhide only the report content and its children */
+        #report-content, #report-content * { visibility: visible; }
+        #customer-invoice, #customer-invoice * { visibility: visible; }
+
+        /* Position the report to top-left for printing */
+        #report-content {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 210mm !important;
+            margin: 0 !important;
+            transform: none !important; /* IMPORTANT: Reset zoom for print */
+            overflow: visible !important;
+        }
+        
+        #customer-invoice {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 210mm !important;
+            margin: 0 !important;
+            transform: none !important;
+        }
+
         .no-print, header, .fixed, button { display: none !important; }
-        .bg-white { width: 210mm !important; min-height: 297mm !important; margin: 0 !important; page-break-after: always; box-shadow: none !important; border: none !important; transform: none !important; }
-        .bg-white:last-child { page-break-after: auto; }
-        .grid-cols-3 { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
-        img { object-fit: cover !important; }
-        .absolute.bottom-12mm { bottom: 12mm !important; }
+        
+        /* Background reset */
+        body { background: white !important; color: black !important; }
+        .bg-white { box-shadow: none !important; border: none !important; }
       }
     `}</style>
   );
@@ -486,12 +511,13 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
          const originalStyle = element.style.cssText;
          
          // 2. Reset style agar PDF mengambil ukuran asli (A4) tanpa zoom/shrink
-         // Ini akan memperbaiki masalah "Shrink" di HP
+         // Ini akan memperbaiki masalah "Shrink" di HP dan "Blank Hitam" di PC
          element.style.width = '210mm';
-         element.style.height = 'auto';
-         element.style.transform = 'none'; // Matikan zoom sementara
+         element.style.height = 'auto'; // Allow height to grow
+         element.style.transform = 'none'; // REMOVE ZOOM
          element.style.margin = '0';
          element.style.overflow = 'visible';
+         element.style.backgroundColor = 'white'; // Force white background
 
          // 3. Konfigurasi html2pdf
          const opt = { 
@@ -683,6 +709,7 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
           element.style.height = '297mm'; // A4 Height fix
           element.style.transform = 'none';
           element.style.margin = '0';
+          element.style.backgroundColor = 'white'; // Force white background for PDF
           
           // 2. Generate Filename: Invoice_NamaCustomer_Tanggal.pdf
           const safeName = customerName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
@@ -980,7 +1007,7 @@ const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectio
         
         {/* Version Footer */}
         <div className="mt-8 text-center">
-            <p className="text-[9px] text-gray-400 opacity-50">v9.0 (Modern Invoice & Auto-PDF)</p>
+            <p className="text-[9px] text-gray-400 opacity-50">v9.1 (Fixed Print & PDF)</p>
         </div>
         
       </div>
