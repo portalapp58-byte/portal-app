@@ -122,7 +122,8 @@ const compressImage = (file, maxWidth = 800, quality = 0.6, mimeType = 'image/jp
   });
 };
 
-// --- SOLUSI PRINT "BLANK WHITE" & ROBUST ---
+// --- SOLUSI PRINT "BLANK WHITE" ---
+// Fungsi ini diperbaiki agar menunggu Tailwind load dan memaksa warna hitam
 const handlePrintIsolated = (elementId) => {
     const content = document.getElementById(elementId);
     if (!content) return;
@@ -141,17 +142,17 @@ const handlePrintIsolated = (elementId) => {
     iframe.style.width = "0";
     iframe.style.height = "0";
     iframe.style.border = "0";
-    // Penting untuk mobile: jangan display: none, tapi visibility hidden atau z-index belakang
-    iframe.style.zIndex = "-1"; 
+    iframe.style.zIndex = "-1"; // Sembunyikan di belakang
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow.document;
     
-    // Ambil style global yang ada (kecuali module scripts)
+    // Ambil style global yang ada
     const styles = Array.from(document.querySelectorAll("style")).map(s => s.outerHTML).join("");
     
-    // HTML Template dengan Tailwind CDN dan Script loading handler
-    const htmlContent = `
+    // Tulis ulang dokumen iframe dengan CSS paksa
+    doc.open();
+    doc.write(`
         <!DOCTYPE html>
         <html>
         <head>
@@ -161,7 +162,6 @@ const handlePrintIsolated = (elementId) => {
             <script src="https://cdn.tailwindcss.com"></script>
             ${styles}
             <style>
-                /* Force Print Styles */
                 @media print {
                     @page { size: A4 portrait; margin: 0; }
                     body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -172,7 +172,8 @@ const handlePrintIsolated = (elementId) => {
                     margin: 0; 
                     padding: 0; 
                 }
-                * { color: black !important; text-shadow: none !important; } /* Paksa teks hitam */
+                /* Paksa semua teks jadi hitam agar tidak invisible jika mode gelap */
+                * { color: black !important; text-shadow: none !important; } 
                 img { max-width: 100%; display: block; }
                 input, textarea { 
                     border: none; 
@@ -182,12 +183,11 @@ const handlePrintIsolated = (elementId) => {
                     resize: none; 
                     width: 100%;
                 }
-                /* Sembunyikan elemen non-print */
                 .print\\:hidden { display: none !important; }
             </style>
         </head>
         <body>
-            <div id="print-container" style="width: 210mm; min-height: 297mm; background: white; margin: 0 auto; overflow: hidden;">
+            <div style="width: 210mm; min-height: 297mm; background: white; margin: 0 auto; overflow: hidden;">
                 ${content.innerHTML}
             </div>
             <script>
@@ -197,22 +197,16 @@ const handlePrintIsolated = (elementId) => {
                 for(let i=0; i<origInputs.length; i++) {
                     if(newInputs[i]) newInputs[i].value = origInputs[i].value;
                 }
-
-                // Fungsi trigger print setelah tailwind ready
-                window.onload = function() {
-                    // Beri jeda sedikit agar rendering CSS selesai sempurna
-                    setTimeout(() => {
-                        window.focus();
-                        window.print();
-                    }, 500);
-                };
+                
+                // Tunggu sebentar agar Tailwind selesai render sebelum print
+                setTimeout(() => {
+                    window.focus();
+                    window.print();
+                }, 1000);
             </script>
         </body>
         </html>
-    `;
-
-    doc.open();
-    doc.write(htmlContent);
+    `);
     doc.close();
 };
 
@@ -571,8 +565,8 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
          element.style.height = 'auto'; 
          element.style.transform = 'none';
          element.style.margin = '0';
-         element.style.backgroundColor = '#ffffff'; // Force white background
-         element.style.color = '#000000'; // Force black text
+         element.style.backgroundColor = '#ffffff'; // PENTING: Force background putih
+         element.style.color = '#000000'; // PENTING: Force text hitam
          
          element.style.position = 'fixed';
          element.style.left = '-9999px';
@@ -589,7 +583,7 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
                  scale: 2, 
                  useCORS: true, 
                  windowWidth: 794, 
-                 backgroundColor: '#ffffff' // PENTING UNTUK MENCEGAH BLACK SCREEN
+                 backgroundColor: '#ffffff' // PENTING: Mencegah background hitam/transparan di PC
              }, 
              jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
          };
@@ -786,7 +780,7 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
               margin: 0, 
               filename: filename, 
               image: { type: 'jpeg', quality: 0.98 }, 
-              html2canvas: { scale: 2, useCORS: true, windowWidth: 794, backgroundColor: '#ffffff' }, // FIX BLACK SCREEN
+              html2canvas: { scale: 2, useCORS: true, windowWidth: 794, backgroundColor: '#ffffff' }, // PENTING: Fix Black Screen
               jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
           };
           
@@ -1092,7 +1086,7 @@ export default function App() {
         {isAgent && viewMode === 'folders' && (<div className={`mb-8 rounded-2xl p-6 shadow-lg text-white bg-gradient-to-br ${getAgentGradient(currentUser.name)} relative overflow-hidden`}><div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div><div className="relative z-10"><div className="flex justify-between items-start mb-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70 mb-1">Tagihan Periode Bulan Ini</p><h2 className="text-xl md:text-2xl font-black uppercase tracking-wide">{new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</h2></div><div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm"><TrendingUp className="w-6 h-6 text-white"/></div></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-white/20"><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">Total Order</p><p className="text-lg font-bold">{currentMonthStats.count} Unit</p></div><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">TOTAL HARGA</p><p className="text-lg font-bold">{formatCurrency(currentMonthStats.totalHarga)}</p></div><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">Total Fee</p><p className="text-lg font-bold">{formatCurrency(currentMonthStats.totalFee)}</p></div><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">Tagihan Bersih</p><p className="text-xl font-black">{formatCurrency(currentMonthStats.totalPayment)}</p></div></div></div></div>)}
         {currentUser.role === 'admin' && viewMode === 'folders' && (<div className="mb-6 card p-4 rounded-xl shadow-sm border border-gray-200/60"><label className="text-[10px] font-bold opacity-50 uppercase ml-1 mb-1 block tracking-wider">Filter Data Mitra</label><div className="relative"><select value={selectedAgentId} onChange={(e) => { setSelectedAgentId(e.target.value); setViewMode('folders'); }} className="input-field w-full p-3 pl-4 pr-10 rounded-lg font-bold text-sm appearance-none outline-none cursor-pointer"><option value="all">-- Semua Data Mitra (Global) --</option>{agents.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"/></div></div>)}
         
-        {/* YEAR SELECTOR UI (ADDED FEATURE) */}
+        {/* YEAR SELECTOR UI */}
         {viewMode === 'folders' && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
                 <div className="flex justify-between items-center mb-2 px-1">
@@ -1137,7 +1131,6 @@ export default function App() {
                     </div>
                     
                     <div className="flex gap-1">
-                        {/* TOMBOL BARU: INVOICE CUSTOMER (Muncul untuk Admin & Mitra) */}
                         <button 
                             onClick={() => setSelectedOrderForInvoice(order)} 
                             className="px-3 py-1.5 bg-gray-900 text-white rounded text-[10px] font-bold flex items-center gap-1 hover:bg-black transition-colors shadow-lg shadow-gray-200"
@@ -1164,7 +1157,6 @@ export default function App() {
       {modals.preview && <ReportPreviewModal onClose={() => setModals({...modals, preview: false})} agentName={currentUser.role === 'agent' ? currentUser.name : agents.find(a => a.id === targetAgentIdForInput)?.name} month={selectedMonth} orders={filteredOrders.filter(o => o.monthKey === selectedMonth)} stats={folders.find(f => f.key === selectedMonth)?.stats || stats} companyInfo={companyInfo} notify={showNotify} />}
       {modals.settings && <SettingsModal onClose={() => setModals({...modals, settings: false})} companyInfo={companyInfo} agents={agents} onUpdateCompany={setCompanyInfo} notify={showNotify} display={display} onUpdateDisplay={setDisplay} />}
       
-      {/* MODAL INVOICE CUSTOMER BARU */}
       {selectedOrderForInvoice && (
         <CustomerInvoiceModal 
             order={selectedOrderForInvoice}
@@ -1177,10 +1169,6 @@ export default function App() {
   );
 }
 
-// Komponen LoginScreen harus ditambahkan kembali jika Anda tidak punya kode ini di file lain.
-// Jika di file sebelumnya ada, pastikan untuk include. 
-// Asumsi: Kode LoginScreen Anda sudah ada di tempat lain atau di bawah file ini.
-// Berikut adalah basic placeholder jika diperlukan:
 const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectionStatus }) => {
     const [mode, setMode] = useState('agent'); // agent | admin
     const [code, setCode] = useState('');
