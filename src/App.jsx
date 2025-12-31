@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   User, Plus, FileText, LogOut, Search, Calendar, 
@@ -587,6 +586,167 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
   );
 };
 
+// --- MODAL INVOICE KHUSUS CUSTOMER (HEADER MITRA) ---
+const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
+  // State untuk data toko mitra (disimpan di LocalStorage agar tidak hilang)
+  const [shopProfile, setShopProfile] = useState(() => {
+    const saved = localStorage.getItem('mitra_shop_profile');
+    return saved ? JSON.parse(saved) : {
+      name: agentName || 'NAMA TOKO ANDA',
+      subname: 'Flower & Decoration',
+      address: 'Alamat Toko Anda di sini...',
+      phone: '08xx-xxxx-xxxx',
+      logo: null
+    };
+  });
+
+  // State untuk harga jual (Bisa diedit karena biasanya di-markup oleh mitra)
+  // Default ambil dari totalPayment, tapi bisa diubah
+  const [sellingPrice, setSellingPrice] = useState(order.totalPayment); 
+  const [customerName, setCustomerName] = useState('Pelanggan Yth');
+
+  // Efek untuk menyimpan profil toko ke local storage setiap ada perubahan
+  useEffect(() => {
+    localStorage.setItem('mitra_shop_profile', JSON.stringify(shopProfile));
+  }, [shopProfile]);
+
+  const handleLogoChange = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        const c = await compressImage(file, 300, 1.0, 'image/png');
+        setShopProfile(prev => ({ ...prev, logo: c }));
+      } catch (err) { console.error(err); }
+    }
+  };
+
+  const handlePrint = () => window.print();
+  
+  const handlePdf = () => {
+      if (!window.html2pdf) {
+          const script = document.createElement('script');
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+          script.onload = () => executePdf();
+          document.body.appendChild(script);
+      } else {
+          executePdf();
+      }
+      function executePdf() {
+          const element = document.getElementById('customer-invoice');
+          const opt = { margin: 0, filename: `Invoice_${order.address.substring(0,10)}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+          window.html2pdf().set(opt).from(element).save();
+      }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/90 z-[200] flex flex-col items-center animate-in fade-in duration-300 overflow-hidden">
+      {/* Toolbar Atas */}
+      <div className="w-full bg-gray-900 border-b border-gray-800 p-3 flex justify-between items-center z-50 print:hidden shrink-0">
+         <div className="text-white">
+           <h3 className="font-bold text-sm">Invoice Customer</h3>
+           <p className="text-[10px] text-gray-400">Edit header & harga sebelum cetak</p>
+         </div>
+         <div className="flex gap-2">
+           <button onClick={handlePdf} className="bg-red-600 text-white px-3 py-2 rounded-lg font-bold text-xs flex gap-2 hover:bg-red-700"><Download className="w-4 h-4"/> PDF</button>
+           <button onClick={handlePrint} className="bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-xs flex gap-2 hover:bg-blue-700"><Printer className="w-4 h-4"/> Print</button>
+           <button onClick={onClose} className="bg-gray-800 text-white p-2 rounded-lg border border-gray-700"><X className="w-5 h-5"/></button>
+         </div>
+      </div>
+
+      {/* Area Edit & Preview */}
+      <div className="flex-1 w-full overflow-y-auto bg-gray-800 p-4 print:p-0 print:bg-white flex justify-center">
+        
+        {/* Kertas A4 */}
+        <div id="customer-invoice" className="bg-white text-black shadow-2xl relative flex flex-col box-border print:shadow-none" style={{ width: '210mm', minHeight: '297mm', padding: '15mm' }}>
+            
+            {/* Header Mitra (Editable) */}
+            <div className="flex justify-between items-center border-b-4 border-gray-800 pb-6 mb-8 group relative">
+                <div className="flex items-center gap-4">
+                    <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden relative cursor-pointer border-2 border-transparent hover:border-blue-400" onClick={() => document.getElementById('shopLogoInput').click()}>
+                        {shopProfile.logo ? <img src={shopProfile.logo} className="w-full h-full object-contain"/> : <ImageIcon className="w-8 h-8 text-gray-300"/>}
+                        <input id="shopLogoInput" type="file" hidden accept="image/*" onChange={handleLogoChange}/>
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[8px] font-bold text-center print:hidden">UBAH LOGO</div>
+                    </div>
+                    <div>
+                        <input value={shopProfile.name} onChange={e => setShopProfile({...shopProfile, name: e.target.value})} className="text-2xl font-black text-gray-900 uppercase tracking-wide w-full outline-none placeholder-gray-300 focus:bg-blue-50 focus:px-2 rounded transition-all" placeholder="NAMA FLORIST ANDA" />
+                        <input value={shopProfile.subname} onChange={e => setShopProfile({...shopProfile, subname: e.target.value})} className="text-sm font-bold text-gray-600 uppercase tracking-[0.2em] w-full outline-none placeholder-gray-300 focus:bg-blue-50 focus:px-2 rounded transition-all" placeholder="SLOGAN / JENIS USAHA" />
+                        <textarea value={shopProfile.address} onChange={e => setShopProfile({...shopProfile, address: e.target.value})} className="text-xs text-gray-500 mt-2 w-full outline-none resize-none focus:bg-blue-50 focus:px-2 rounded transition-all" rows={2} placeholder="Alamat lengkap toko anda..." />
+                        <input value={shopProfile.phone} onChange={e => setShopProfile({...shopProfile, phone: e.target.value})} className="text-xs text-gray-500 font-bold w-full outline-none focus:bg-blue-50 focus:px-2 rounded transition-all" placeholder="No. Telp / WA" />
+                    </div>
+                </div>
+                <div className="text-right">
+                    <h2 className="text-4xl font-black text-gray-200 uppercase tracking-tighter select-none">INVOICE</h2>
+                    <p className="text-xs font-mono text-gray-400 mt-1">NO: INV/{new Date(order.date).getTime().toString().slice(-6)}</p>
+                    <p className="text-xs font-mono text-gray-400">{new Date().toLocaleDateString('id-ID')}</p>
+                </div>
+            </div>
+
+            {/* Customer Info */}
+            <div className="mb-8">
+                <p className="text-xs font-bold text-gray-400 uppercase mb-2">Kepada Yth:</p>
+                <input value={customerName} onChange={e => setCustomerName(e.target.value)} className="text-lg font-bold text-gray-800 w-full outline-none border-b border-dashed border-gray-300 focus:border-blue-500 mb-2" />
+                <div className="p-4 bg-gray-50 rounded border border-gray-100">
+                    <p className="text-sm text-gray-600 italic">"{order.address}"</p>
+                    {order.description && <p className="text-xs text-gray-500 mt-2">Catatan: {order.description}</p>}
+                </div>
+            </div>
+
+            {/* Order Details Image */}
+            <div className="mb-8 flex justify-center bg-gray-50 border border-gray-200 rounded-xl overflow-hidden p-2 h-[80mm]">
+                 {order.photo ? <img src={order.photo} className="h-full object-contain rounded-lg shadow-sm" /> : <div className="flex items-center justify-center w-full h-full text-gray-300 text-sm">Tidak ada foto produk</div>}
+            </div>
+
+            {/* Payment Details */}
+            <div className="mt-auto">
+                <table className="w-full text-sm mb-8">
+                    <thead className="border-b-2 border-gray-800">
+                        <tr>
+                            <th className="text-left py-2 font-black uppercase">Deskripsi Produk</th>
+                            <th className="text-right py-2 font-black uppercase w-40">Total Tagihan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td className="py-4 text-gray-600 font-medium">
+                                Pemesanan Rangkaian Bunga / Papan Bunga
+                                <br/><span className="text-xs text-gray-400">Tanggal Kirim: {formatDateShort(order.deliveryDate)}</span>
+                            </td>
+                            <td className="py-4 text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                    <span className="text-gray-500 font-bold">Rp</span>
+                                    <input 
+                                        type="number" 
+                                        value={sellingPrice} 
+                                        onChange={e => setSellingPrice(e.target.value)} 
+                                        className="font-black text-xl text-right outline-none w-32 border-b border-transparent hover:border-gray-300 focus:border-blue-500 transition-colors bg-transparent"
+                                    />
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                {/* Footer Signature */}
+                <div className="flex justify-between items-end px-4">
+                    <div className="text-xs text-gray-400 italic max-w-[200px]">
+                        Terima kasih atas kepercayaan Anda menggunakan jasa kami.
+                    </div>
+                    <div className="text-center">
+                        <p className="mb-16 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hormat Kami,</p>
+                        <p className="font-bold border-t border-gray-300 pt-2 min-w-[150px] text-sm uppercase">{shopProfile.name}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="print:hidden absolute top-2 right-2 text-[10px] text-red-400 bg-red-50 px-2 py-1 rounded border border-red-100 opacity-50 hover:opacity-100 pointer-events-none">
+                *Klik teks untuk mengedit langsung
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // LOGIN SCREEN
 const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectionStatus }) => {
   const [activeTab, setActiveTab] = useState('mitra');
@@ -713,7 +873,7 @@ const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectio
         
         {/* Version Footer */}
         <div className="mt-8 text-center">
-            <p className="text-[9px] text-gray-400 opacity-50">v8.6 (Mobile Ready)</p>
+            <p className="text-[9px] text-gray-400 opacity-50">v8.7 (Invoice Customer Added)</p>
         </div>
         
       </div>
@@ -738,6 +898,7 @@ export default function App() {
   const [editingOrder, setEditingOrder] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('Loading...');
   const [dashboardReady, setDashboardReady] = useState(false);
+  const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState(null);
 
   const currentTheme = THEMES[display?.theme] || THEMES.emerald;
   const showNotify = (msg, type='success') => { setNotify({ message: msg, type }); setTimeout(() => setNotify(null), 3000); };
@@ -966,7 +1127,34 @@ export default function App() {
                    {(() => { const mStats = folders.find(f => f.key === selectedMonth)?.stats || { totalPayment:0, count:0, totalHarga:0, totalFee:0, totalOngkir:0 }; return (<div className={`grid grid-cols-2 sm:grid-cols-4 gap-4 relative z-10 pt-4 border-t ${display.mode === 'dark' ? 'border-gray-700' : 'border-gray-100'}`}><div className="bg-gray-50 p-2 rounded border border-gray-100"><p className="text-[9px] font-bold opacity-50 uppercase tracking-wider mb-1 flex items-center gap-1"><ShoppingBag className="w-3 h-3"/> Total Order</p><p className="text-lg font-black tracking-tight text-gray-800">{mStats.count} <span className="text-[10px] font-normal text-gray-500">Unit</span></p></div><div className="bg-gray-50 p-2 rounded border border-gray-100"><p className="text-[9px] font-bold opacity-50 uppercase tracking-wider mb-1 flex items-center gap-1"><Wallet className="w-3 h-3"/> TOTAL HARGA</p><p className="text-lg font-black tracking-tight text-gray-800">{formatCurrency(mStats.totalHarga)}</p></div><div className="bg-red-50 p-2 rounded border border-red-100"><p className="text-[9px] font-bold text-red-400 uppercase tracking-wider mb-1 flex items-center gap-1"><Percent className="w-3 h-3"/> Potongan Fee</p><p className="text-lg font-black tracking-tight text-red-600">-{formatCurrency(mStats.totalFee)}</p></div><div className="bg-emerald-50 p-2 rounded border border-emerald-100"><p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mb-1 flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Tagihan Bersih</p><p className="text-lg font-black tracking-tight text-emerald-700">{formatCurrency(mStats.totalPayment)}</p></div></div>); })()}
                    <div className="mt-4 pt-2 border-t border-dashed border-gray-200"><button onClick={() => setModals({...modals, preview: true})} className={`w-full py-3 rounded-lg shadow font-bold text-sm flex gap-2 justify-center items-center text-white ${currentTheme.bg} hover:opacity-90 active:scale-95 transition-all`}><Eye className="w-4 h-4"/> Preview Invoice</button></div>
                 </div>
-                <div className="space-y-3"><h3 className="text-xs font-bold opacity-50 uppercase tracking-wider px-1">Rincian Transaksi</h3>{filteredOrders.filter(o => o.monthKey === selectedMonth).length === 0 ? (<div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-xl text-gray-400">Tidak ada transaksi di bulan ini.</div>) : (filteredOrders.filter(o => o.monthKey === selectedMonth).map(order => (<div key={order.id} className="card p-3 rounded-lg shadow-sm flex flex-col gap-3 hover:shadow-md transition-shadow border border-gray-100 group"><div className="flex gap-3"><div className={`w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border ${display.mode === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'}`}>{order.photo ? <img src={order.photo} className="w-full h-full object-cover"/> : <ImageIcon className="w-6 h-6 m-auto mt-5 opacity-30"/>}</div><div className="flex-1 min-w-0"><div className="flex justify-between items-start mb-1"><p className="text-xs font-bold truncate leading-tight pr-2 text-gray-800">{order.address}</p><span className={`text-[10px] font-medium whitespace-nowrap px-1.5 py-0.5 rounded ${display.mode === 'dark' ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>{formatDateShort(order.date)}</span></div><p className="text-[10px] opacity-60 line-clamp-1 mb-2">{order.description || '-'}</p><div className={`grid grid-cols-3 gap-2 text-[9px] p-2 rounded ${display.mode === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}><div><span className="block opacity-50">Harga</span><span className="font-bold">{formatCurrency(order.price)}</span></div><div><span className="block opacity-50">Ongkir</span><span className="font-bold">{formatCurrency(order.shipping)}</span></div><div className="text-red-500"><span className="block opacity-50">Fee</span><span className="font-bold">-{formatCurrency(order.fee)}</span></div></div></div></div><div className="flex justify-between items-center pt-2 border-t border-gray-100"><div className="flex items-center gap-2"><span className="text-[10px] font-bold opacity-50">TOTAL BAYAR</span><span className={`text-sm font-black ${currentTheme.text}`}>{formatCurrency(order.totalPayment)}</span></div>{currentUser.role === 'admin' && (<div className="flex gap-1"><button onClick={() => handleEditOrder(order)} className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"><Pencil className="w-3 h-3" /></button><button onClick={() => handleDeleteOrder(order.id)} className="p-1.5 bg-red-50 text-red-500 rounded hover:bg-red-100 transition-colors"><Trash2 className="w-3 h-3" /></button></div>)}</div></div>)))}</div>
+                <div className="space-y-3"><h3 className="text-xs font-bold opacity-50 uppercase tracking-wider px-1">Rincian Transaksi</h3>{filteredOrders.filter(o => o.monthKey === selectedMonth).length === 0 ? (<div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-xl text-gray-400">Tidak ada transaksi di bulan ini.</div>) : (filteredOrders.filter(o => o.monthKey === selectedMonth).map(order => (<div key={order.id} className="card p-3 rounded-lg shadow-sm flex flex-col gap-3 hover:shadow-md transition-shadow border border-gray-100 group"><div className="flex gap-3"><div className={`w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border ${display.mode === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'}`}>{order.photo ? <img src={order.photo} className="w-full h-full object-cover"/> : <ImageIcon className="w-6 h-6 m-auto mt-5 opacity-30"/>}</div><div className="flex-1 min-w-0"><div className="flex justify-between items-start mb-1"><p className="text-xs font-bold truncate leading-tight pr-2 text-gray-800">{order.address}</p><span className={`text-[10px] font-medium whitespace-nowrap px-1.5 py-0.5 rounded ${display.mode === 'dark' ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>{formatDateShort(order.date)}</span></div><p className="text-[10px] opacity-60 line-clamp-1 mb-2">{order.description || '-'}</p><div className={`grid grid-cols-3 gap-2 text-[9px] p-2 rounded ${display.mode === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}><div><span className="block opacity-50">Harga</span><span className="font-bold">{formatCurrency(order.price)}</span></div><div><span className="block opacity-50">Ongkir</span><span className="font-bold">{formatCurrency(order.shipping)}</span></div><div className="text-red-500"><span className="block opacity-50">Fee</span><span className="font-bold">-{formatCurrency(order.fee)}</span></div></div></div></div>
+                
+                <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold opacity-50">TOTAL BAYAR</span>
+                        <span className={`text-sm font-black ${currentTheme.text}`}>{formatCurrency(order.totalPayment)}</span>
+                    </div>
+                    
+                    <div className="flex gap-1">
+                        {/* TOMBOL BARU: INVOICE CUSTOMER (Muncul untuk Admin & Mitra) */}
+                        <button 
+                            onClick={() => setSelectedOrderForInvoice(order)} 
+                            className="px-3 py-1.5 bg-gray-900 text-white rounded text-[10px] font-bold flex items-center gap-1 hover:bg-black transition-colors shadow-lg shadow-gray-200"
+                        >
+                            <Printer className="w-3 h-3" />
+                            INVOICE
+                        </button>
+
+                        {currentUser.role === 'admin' && (
+                            <>
+                                <button onClick={() => handleEditOrder(order)} className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"><Pencil className="w-3 h-3" /></button>
+                                <button onClick={() => handleDeleteOrder(order.id)} className="p-1.5 bg-red-50 text-red-500 rounded hover:bg-red-100 transition-colors"><Trash2 className="w-3 h-3" /></button>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                </div>)))}</div>
             </div>
         )}
       </main>
@@ -974,6 +1162,16 @@ export default function App() {
       {modals.add && <OrderFormModal key={editingOrder ? editingOrder.id : 'new'} onClose={() => setModals({...modals, add: false})} onSave={handleSaveOrder} agents={agents} currentUser={currentUser} fixedAgentId={targetAgentIdForInput} defaultDate={`${selectedMonth}-01`} notify={showNotify} initialData={editingOrder} />}
       {modals.preview && <ReportPreviewModal onClose={() => setModals({...modals, preview: false})} agentName={currentUser.role === 'agent' ? currentUser.name : agents.find(a => a.id === targetAgentIdForInput)?.name} month={selectedMonth} orders={filteredOrders.filter(o => o.monthKey === selectedMonth)} stats={folders.find(f => f.key === selectedMonth)?.stats || stats} companyInfo={companyInfo} notify={showNotify} />}
       {modals.settings && <SettingsModal onClose={() => setModals({...modals, settings: false})} companyInfo={companyInfo} agents={agents} onUpdateCompany={setCompanyInfo} notify={showNotify} display={display} onUpdateDisplay={setDisplay} />}
+      
+      {/* MODAL INVOICE CUSTOMER BARU */}
+      {selectedOrderForInvoice && (
+        <CustomerInvoiceModal 
+            order={selectedOrderForInvoice}
+            agentName={currentUser.role === 'agent' ? currentUser.name : agents.find(a => a.id === selectedOrderForInvoice.agentId)?.name}
+            onClose={() => setSelectedOrderForInvoice(null)}
+            notify={showNotify}
+        />
+      )}
     </div>
   );
 }
