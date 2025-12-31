@@ -122,75 +122,68 @@ const compressImage = (file, maxWidth = 800, quality = 0.6, mimeType = 'image/jp
   });
 };
 
-// --- SOLUSI PRINT "BLANK WHITE" & PDF FIX ---
-// Fungsi ini dimodifikasi untuk memastikan CSS loaded sebelum print
+// --- SOLUSI PRINT "BLANK WHITE" ---
+// Fungsi ini membuat iframe terisolasi, menyuntikkan CSS Tailwind, dan mencetak isinya.
 const handlePrintIsolated = (elementId) => {
     const content = document.getElementById(elementId);
     if (!content) return;
 
     // Cek atau buat iframe print hidden
     let iframe = document.getElementById("printFrame");
-    if (iframe) document.body.removeChild(iframe);
-    
-    iframe = document.createElement("iframe");
-    iframe.id = "printFrame";
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    document.body.appendChild(iframe);
+    if (!iframe) {
+        iframe = document.createElement("iframe");
+        iframe.id = "printFrame";
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0";
+        iframe.style.height = "0";
+        iframe.style.border = "0";
+        document.body.appendChild(iframe);
+    }
 
     const doc = iframe.contentWindow.document;
     
     // Ambil style global yang ada
     const styles = Array.from(document.querySelectorAll("style")).map(s => s.outerHTML).join("");
     
-    // Tulis dokumen iframe dengan Script Tailwind dan Handler onload
+    // Tulis ulang dokumen iframe
     doc.open();
     doc.write(`
-        <!DOCTYPE html>
         <html>
         <head>
             <title>Cetak Dokumen</title>
             <script src="https://cdn.tailwindcss.com"></script>
             ${styles}
             <style>
-                :root { --bg-main: #fff !important; --bg-card: #fff !important; --text-main: #000 !important; }
-                body { background-color: white !important; color: black !important; margin: 0; padding: 0; }
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                body { background-color: white !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
                 @page { size: A4 portrait; margin: 0; }
-                img { max-width: 100%; break-inside: avoid; }
+                img { max-width: 100%; }
                 input, textarea { border: none; background: transparent; font-weight: bold; color: black; resize: none; }
-                .no-print { display: none !important; }
             </style>
         </head>
         <body>
-            <div id="print-content" style="width: 210mm; min-height: 297mm; background: white; margin: 0 auto; overflow: hidden;">
+            <div style="width: 210mm; min-height: 297mm; background: white; margin: 0 auto; overflow: hidden;">
                 ${content.innerHTML}
             </div>
             <script>
-                // Salin value input manual
+                // Salin value input manual karena innerHTML tidak membawanya
                 const origInputs = parent.document.getElementById('${elementId}').querySelectorAll('input, textarea');
                 const newInputs = document.querySelectorAll('input, textarea');
                 for(let i=0; i<origInputs.length; i++) {
                     newInputs[i].value = origInputs[i].value;
                 }
-                
-                // Print otomatis setelah script Tailwind selesai
-                window.onload = function() {
-                    // Beri jeda sedikit untuk render image
-                    setTimeout(function() {
-                        window.focus();
-                        window.print();
-                    }, 1500); // Waktu tunggu ditingkatkan agar tidak blank
-                };
             </script>
         </body>
         </html>
     `);
     doc.close();
+
+    // Tunggu render sebentar lalu print
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+        iframe.contentWindow.print();
+    }, 1000);
 };
 
 const DEFAULT_COMPANY = {
@@ -222,16 +215,6 @@ const GlobalStyleInjector = ({ mode, fontSize }) => {
       .settings-scroll::-webkit-scrollbar { width: 6px; }
       .settings-scroll::-webkit-scrollbar-track { background: transparent; }
       .settings-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
-      
-      /* Force Light Mode for PDF Generation Class */
-      .pdf-force-light {
-         --bg-main: #ffffff !important;
-         --bg-card: #ffffff !important;
-         --text-main: #000000 !important;
-         --border: #e2e8f0 !important;
-         background-color: white !important;
-         color: black !important;
-      }
       
       @keyframes shake {
         0%, 100% { transform: translateX(0); }
@@ -557,7 +540,6 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
          
          // 2. FORCE STYLES ON CLONE (Fix Dark Mode Issue)
          // Tambahkan kelas khusus dan reset variabel CSS
-         element.classList.add('pdf-force-light');
          element.style.width = '210mm';
          element.style.height = 'auto'; 
          element.style.transform = 'none'; // Matikan zoom scale
@@ -754,7 +736,6 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
           
           // 1. CLONE NODE 
           const element = originalElement.cloneNode(true);
-          element.classList.add('pdf-force-light');
           
           // 2. FORCE STYLES (Clean White Background)
           element.style.width = '210mm';
@@ -954,6 +935,140 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
   );
 };
 
+// LOGIN SCREEN
+const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectionStatus }) => {
+  const [activeTab, setActiveTab] = useState('mitra');
+  const [inputCode, setInputCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const isMounted = useRef(true);
+
+  useEffect(() => { return () => { isMounted.current = false; }; }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!inputCode.trim()) { setError("Mohon isi kode terlebih dahulu"); return; }
+    
+    setLoading(true);
+
+    try {
+        const code = inputCode.trim();
+        
+        // 1. ADMIN LOGIN (Immediate Check)
+        const validAdminPin = adminPin || "123456";
+        if (activeTab === 'admin') {
+            if (code === validAdminPin) {
+                onLogin({ role: 'admin', name: 'Admin Pusat' });
+                return; // Component will unmount
+            } else {
+                throw new Error("PIN Salah!");
+            }
+        }
+
+        // 2. MITRA LOGIN
+        // A. Cek di data yang sudah ter-load (Synchronous)
+        let agent = agents.find(a => String(a.code).trim().toLowerCase() === code.toLowerCase());
+        
+        if (agent) {
+             onLogin({ ...agent, role: 'agent' });
+             return;
+        }
+
+        // B. Coba fetch ke DB (Asynchronous dengan Timeout)
+        // Promise Race: Fetch vs Timeout
+        const fetchPromise = (async () => {
+             // Try lowercase
+             let collRef = getCollection('agents');
+             let snap = await getDocs(collRef);
+             if(snap.empty) {
+                 collRef = getCollection('Agents', true);
+                 snap = await getDocs(collRef);
+             }
+             return snap.docs.map(d => ({id: d.id, ...d.data(), code: d.data().code || d.data().Code || d.data().kode || d.data().Kode || d.data().KODE }));
+        })();
+
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Timeout")), 5000)
+        );
+
+        try {
+            const remoteAgents = await Promise.race([fetchPromise, timeoutPromise]);
+            agent = remoteAgents.find(a => String(a.code).trim().toLowerCase() === code.toLowerCase());
+        } catch (err) {
+            console.error("Remote check failed:", err);
+        }
+
+        if (agent) {
+            onLogin({ ...agent, role: 'agent' });
+        } else {
+            throw new Error("Kode Tidak Ditemukan");
+        }
+
+    } catch (err) {
+        console.error("Login Error:", err);
+        setError(err.message || "Gagal Login");
+        setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-[100dvh] bg-slate-50 flex flex-col items-center justify-center p-4 font-sans relative overflow-hidden supports-[min-h:100dvh]:min-h-[100dvh]">
+      {/* Background Blobs - Adjusted for mobile */}
+      <div className="absolute top-[-10%] right-[-20%] w-[80%] h-[60%] bg-blue-200/40 rounded-full blur-[80px] md:blur-[100px]"></div>
+      <div className="absolute bottom-[-10%] left-[-20%] w-[80%] h-[60%] bg-emerald-200/40 rounded-full blur-[80px] md:blur-[100px]"></div>
+      
+      {/* CASPER BACKGROUND IMAGE - MASSIVE SIZE on Left */}
+      <img 
+        src="https://pngimg.com/uploads/casper/casper_PNG6.png" 
+        alt="Casper Background"
+        className="absolute top-1/2 left-[-50%] md:left-[-15%] transform -translate-y-1/2 h-[110vh] md:h-[120vh] w-auto opacity-15 pointer-events-none z-0 animate-pulse object-contain transition-all duration-500"
+        style={{ animationDuration: '4s' }}
+      />
+
+      <div className="w-full max-w-[350px] z-10 animate-in fade-in zoom-in duration-500 relative">
+        <div className="text-center mb-6">
+          <div className="w-24 h-24 md:w-28 md:h-28 flex items-center justify-center mx-auto -mb-2 translate-y-3 relative z-10">{companyLogo ? <img src={companyLogo} className="w-full h-full object-contain drop-shadow-2xl"/> : <div className="w-14 h-14 md:w-16 md:h-16 bg-white rounded-xl flex items-center justify-center shadow-lg"><FileText className="w-7 h-7 md:w-8 md:h-8 text-black" /></div>}</div>
+          <h1 className="text-2xl md:text-4xl font-black text-gray-900 tracking-widest mt-0 relative z-0 drop-shadow-sm whitespace-nowrap">MFG PORTAL</h1>
+          <p className="text-[9px] md:text-[10px] font-bold text-emerald-600 uppercase tracking-[0.2em] mt-1 bg-emerald-50 inline-block px-2 py-0.5 rounded-full border border-emerald-100">Integrated Management System</p>
+        </div>
+        
+        {/* Connection Status Indicator */}
+        <div className={`mb-4 flex flex-col items-center justify-center gap-1`}>
+            <div className={`flex items-center gap-2 text-[10px] font-bold px-3 py-1.5 rounded-full border bg-emerald-50 text-emerald-600 border-emerald-200`}>
+                <Wifi className="w-3 h-3"/>
+                <span>{connectionStatus}</span>
+            </div>
+        </div>
+
+        <div className={`bg-white/90 backdrop-blur-md border-2 ${error ? 'border-red-500 animate-shake' : 'border-emerald-500/30'} rounded-xl shadow-2xl overflow-hidden p-4 transition-all`}>
+          <div className="flex bg-emerald-50/50 p-1 rounded-xl mb-6 gap-2"><button onClick={() => { setActiveTab('mitra'); setInputCode(""); setError(""); }} className={`flex-1 py-3 md:py-4 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${activeTab === 'mitra' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' : 'text-emerald-700 hover:bg-emerald-100 bg-emerald-50/50'}`}>Mitra</button><button onClick={() => { setActiveTab('admin'); setInputCode(""); setError(""); }} className={`flex-1 py-3 md:py-4 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${activeTab === 'admin' ? 'bg-gray-800 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100 bg-gray-50'}`}>Admin</button></div>
+          <form onSubmit={handleSubmit} className="pb-2">
+              <div className="relative mb-2">
+                  <input type={activeTab === 'admin' ? "password" : "text"} value={inputCode} onChange={(e) => { setInputCode(e.target.value); setError(""); }} className={`block w-full py-4 bg-gray-100 border ${error ? 'border-red-500 bg-red-50' : 'border-gray-200'} rounded-xl text-center text-lg font-black text-gray-800 placeholder-gray-400 focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all uppercase tracking-[0.2em] shadow-inner`} placeholder={activeTab === 'mitra' ? "KODE" : "PIN"} autoFocus />
+              </div>
+              {error && (<div className="flex items-center justify-center gap-2 text-red-500 mb-4 animate-in fade-in slide-in-from-top-1"><XCircle className="w-4 h-4" /><p className="text-xs font-bold">{error}</p></div>)}
+              {!error && (
+                  <div className="text-center mb-6">
+                      <p className="text-[10px] text-gray-400 font-medium italic">
+                          {activeTab === 'mitra' ? 'Masukkan Kode Akses Mitra' : 'Masukkan PIN Keamanan Admin'}
+                      </p>
+                  </div>
+              )}
+              <button disabled={loading} className={`w-full py-3.5 rounded-xl text-xs font-black shadow-lg transform active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${activeTab === 'mitra' ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-200' : 'bg-gray-900 hover:bg-black text-white'}`}>{loading ? <Loader2 className="w-4 h-4 animate-spin"/> : 'MASUK KE SISTEM'}</button>
+          </form>
+        </div>
+        
+        {/* Version Footer */}
+        <div className="mt-8 text-center">
+            <p className="text-[9px] text-gray-400 opacity-50">v9.3 (Print Fixed)</p>
+        </div>
+        
+      </div>
+    </div>
+  );
+};
+
 // --- 6. MAIN APP ---
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -972,6 +1087,7 @@ export default function App() {
   const [connectionStatus, setConnectionStatus] = useState('Loading...');
   const [dashboardReady, setDashboardReady] = useState(false);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState(null);
+  // NEW STATE FOR YEAR SELECTOR
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const currentTheme = THEMES[display?.theme] || THEMES.emerald;
@@ -980,92 +1096,185 @@ export default function App() {
   useEffect(() => {
     const init = async () => {
         try {
+            // Attempt Anonymous Sign In
             await signInAnonymously(auth).catch((e) => {
                 console.error("Auth Failed:", e);
                 setConnectionStatus("Auth Failed");
             });
+            
             setConnectionStatus("Terhubung (Memuat Data...)");
 
+            // Listeners
             const unsubscribeAgents = onSnapshot(getCollection('agents'), (s) => { 
+                console.log("Agents snapshot received. Count:", s.size);
                 const fetchedAgents = s.docs.map(d => {
                     const data = d.data();
-                    return { id: d.id, ...data, code: data.code || data.Code || data.kode || data.Kode || data.KODE };
+                    // Smart Mapping to handle inconsistent capitalization
+                    return {
+                        id: d.id,
+                        ...data,
+                        code: data.code || data.Code || data.kode || data.Kode || data.KODE
+                    };
                 });
                 
                 if (fetchedAgents.length === 0 && !localStorage.getItem('mfg_seeded')) { 
-                   try { addDoc(getCollection('agents'), { name: "Mitra A (Contoh)", code: "A001", createdAt: serverTimestamp() }); localStorage.setItem('mfg_seeded', 'true'); } catch(err) { console.warn("Seeding failed", err); }
+                   try {
+                     addDoc(getCollection('agents'), { name: "Mitra A (Contoh)", code: "A001", createdAt: serverTimestamp() }); 
+                     localStorage.setItem('mfg_seeded', 'true'); 
+                   } catch(err) {
+                       console.warn("Seeding failed (permission denied?), ignoring.", err);
+                   }
                 } 
                 setAgents(fetchedAgents); 
-                if (fetchedAgents.length > 0) setConnectionStatus("Siap Digunakan"); else setConnectionStatus("Data Kosong");
-            }, (error) => { console.error(error); setConnectionStatus("Permission Denied"); });
+                
+                if (fetchedAgents.length > 0) {
+                    setConnectionStatus("Siap Digunakan");
+                } else {
+                    setConnectionStatus("Data Kosong");
+                }
 
-            onSnapshot(getDocRef('settings_company', 'main'), (d) => { if(d.exists()) setCompanyInfo(d.data()); });
-            onSnapshot(getCollection('monthly_status'), (s) => { const statusMap = {}; s.docs.forEach(d => { statusMap[d.id] = d.data().status; }); setMonthlyStatus(statusMap); });
+            }, (error) => {
+                console.error("Agents Snapshot Error:", error);
+                setConnectionStatus("Permission Denied");
+            });
+
+            onSnapshot(getDocRef('settings_company', 'main'), (d) => { 
+                if(d.exists()) setCompanyInfo(d.data()); 
+            }, (e) => console.log("Company info read error (ignorable for demo)", e));
+
+            onSnapshot(getCollection('monthly_status'), (s) => { 
+                const statusMap = {}; 
+                s.docs.forEach(d => { statusMap[d.id] = d.data().status; }); 
+                setMonthlyStatus(statusMap); 
+            }, (e) => console.log("Monthly status read error", e));
             
-            return () => unsubscribeAgents();
-        } catch (error) { console.error(error); setConnectionStatus("Connection Error"); }
+            return () => {
+                unsubscribeAgents();
+            };
+
+        } catch (error) {
+            console.error("Firebase Init General Error:", error);
+            setConnectionStatus("Connection Error");
+        }
     }; 
     init();
   }, []);
 
   useEffect(() => { 
       if (!currentUser) return; 
+      
       const q = query(getCollection('orders'));
       const unsub = onSnapshot(q, (s) => { 
+          // SANITIZE DATA TO PREVENT CRASHES
           const d = s.docs.map(d => {
               const data = d.data();
-              return { id: d.id, ...data, price: parseFloat(data.price)||0, shipping: parseFloat(data.shipping)||0, fee: parseFloat(data.fee)||0, totalPayment: parseFloat(data.totalPayment)||0 };
-          }).filter(item => item.date && !isNaN(new Date(item.date).getTime()));
+              return { 
+                  id: d.id, 
+                  ...data,
+                  // Ensure numeric values are numbers
+                  price: parseFloat(data.price) || 0,
+                  shipping: parseFloat(data.shipping) || 0,
+                  fee: parseFloat(data.fee) || 0,
+                  totalPayment: parseFloat(data.totalPayment) || 0
+              };
+          }).filter(item => {
+              // Filter out bad dates
+              return item.date && !isNaN(new Date(item.date).getTime());
+          });
+
           d.sort((a, b) => new Date(b.date) - new Date(a.date)); 
           setOrders(d); 
+      }, (err) => {
+          console.error("Orders Snapshot Error:", err);
       });
       return () => unsub();
   }, [currentUser]);
 
-  useEffect(() => { if (currentUser) { const timer = setTimeout(() => setDashboardReady(true), 500); return () => clearTimeout(timer); } else { setDashboardReady(false); } }, [currentUser]);
+  // Dashboard Ready Effect
+  useEffect(() => {
+      if (currentUser) {
+          // Simulate loading delay for smooth transition
+          const timer = setTimeout(() => setDashboardReady(true), 500);
+          return () => clearTimeout(timer);
+      } else {
+          setDashboardReady(false);
+      }
+  }, [currentUser]);
 
   const handleSaveOrder = async (d) => { 
       try { 
-          if (d.id) { const { id, ...data } = d; await updateDoc(getDocRef('orders', id), data); showNotify("Data diperbarui!"); } 
-          else { await addDoc(getCollection('orders'), d); showNotify("Data tersimpan!"); } 
+          if (d.id) { 
+              const { id, ...data } = d; 
+              await updateDoc(getDocRef('orders', id), data); 
+              showNotify("Data diperbarui!"); 
+          } else { 
+              await addDoc(getCollection('orders'), d); 
+              showNotify("Data tersimpan!"); 
+          } 
           setModals({...modals, add: false}); setEditingOrder(null); setSuccessPopup(true); setTimeout(() => setSuccessPopup(false), 1500); 
-      } catch (err) { showNotify("Gagal menyimpan", "error"); } 
+      } catch (err) { console.error(err); showNotify("Gagal menyimpan (File Terlalu Besar atau Permission Error)", "error"); } 
   };
   
-  const handleDeleteOrder = async (id) => { if (confirm("Hapus?")) { await deleteDoc(getDocRef('orders', id)); showNotify("Terhapus"); } };
+  const handleDeleteOrder = async (id) => { 
+      if (confirm("Hapus?")) { 
+          await deleteDoc(getDocRef('orders', id)); 
+          showNotify("Terhapus"); 
+      } 
+  };
+
   const handleEditOrder = (order) => { setEditingOrder(order); setModals({...modals, add: true}); };
   const filteredOrders = useMemo(() => { if (!currentUser) return []; let res = orders; if (currentUser.role === 'agent') res = res.filter(o => o.agentId === currentUser.id); else if (selectedAgentId !== 'all') res = res.filter(o => o.agentId === selectedAgentId); return res; }, [orders, currentUser, selectedAgentId]);
   
+  // SAFE FOLDER CALCULATION
   const folders = useMemo(() => { 
       try {
-        const currentYear = selectedYear; const allMonths = []; const groups = {}; 
+        const currentYear = selectedYear; // <--- UPDATED: USE SELECTED YEAR STATE
+        const allMonths = []; const groups = {}; 
         filteredOrders.forEach(o => { 
-            const mKey = o.monthKey; if (!mKey) return; 
+            const mKey = o.monthKey; 
+            if (!mKey) return; // Skip invalid keys
             if (!groups[mKey]) groups[mKey] = { count: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0, totalHarga: 0 }; 
-            groups[mKey].count += 1; groups[mKey].totalFee += o.fee; groups[mKey].totalOngkir += o.shipping; groups[mKey].totalPayment += o.totalPayment; groups[mKey].totalHarga += o.price; 
+            groups[mKey].count += 1; 
+            groups[mKey].totalFee += o.fee; 
+            groups[mKey].totalOngkir += o.shipping; 
+            groups[mKey].totalPayment += o.totalPayment; 
+            groups[mKey].totalHarga += o.price; 
         }); 
         for (let i = 0; i < 12; i++) { 
-            const monthNum = String(i + 1).padStart(2, '0'); const key = `${currentYear}-${monthNum}`; 
+            const monthNum = String(i + 1).padStart(2, '0'); 
+            const key = `${currentYear}-${monthNum}`; 
             allMonths.push({ key: key, stats: groups[key] || { count: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0, totalHarga: 0 } }); 
         } 
         return allMonths; 
-      } catch (e) { return []; }
-  }, [filteredOrders, selectedYear]);
+      } catch (e) {
+          console.error("Folder calculation error", e);
+          return [];
+      }
+  }, [filteredOrders, selectedYear]); // <--- DEPENDENCY UPDATED
 
+  // SAFE CURRENT MONTH STATS
   const currentMonthStats = useMemo(() => { 
       try {
         const now = new Date(); const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; 
         const currentOrders = filteredOrders.filter(o => o.monthKey === currentMonthKey); 
         return currentOrders.reduce((acc, o) => ({ count: acc.count + 1, totalHarga: acc.totalHarga + o.price, totalFee: acc.totalFee + o.fee, totalOngkir: acc.totalOngkir + o.shipping, totalPayment: acc.totalPayment + o.totalPayment }), { count: 0, totalHarga: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0 }); 
-      } catch(e) { return { count: 0, totalHarga: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0 }; }
+      } catch(e) {
+          console.error("Stats calculation error", e);
+          return { count: 0, totalHarga: 0, totalFee: 0, totalOngkir: 0, totalPayment: 0 };
+      }
   }, [filteredOrders]);
   
   const toggleMonthStatus = async (monthKey) => { 
       if(currentUser.role !== 'admin') return; 
       const targetAgentId = currentUser.role === 'agent' ? currentUser.id : selectedAgentId; 
-      if(targetAgentId === 'all') { showNotify("Pilih Mitra spesifik!", "error"); return; } 
-      const docId = `status_${monthKey}_${targetAgentId}`; const currentStatus = monthlyStatus[docId] || 'belum'; const newStatus = currentStatus === 'lunas' ? 'belum' : 'lunas'; 
-      await setDoc(getDocRef('monthly_status', docId), { monthKey, agentId: targetAgentId, status: newStatus, updatedAt: serverTimestamp() }); showNotify(`Status: ${newStatus.toUpperCase()}`); 
+      if(targetAgentId === 'all') { showNotify("Pilih Mitra spesifik untuk ubah status!", "error"); return; } 
+      
+      const docId = `status_${monthKey}_${targetAgentId}`; 
+      const currentStatus = monthlyStatus[docId] || 'belum'; 
+      const newStatus = currentStatus === 'lunas' ? 'belum' : 'lunas'; 
+
+      await setDoc(getDocRef('monthly_status', docId), { monthKey, agentId: targetAgentId, status: newStatus, updatedAt: serverTimestamp() }); 
+      showNotify(`Status: ${newStatus.toUpperCase()}`); 
   };
   
   const getStatus = (monthKey) => { const targetAgentId = currentUser.role === 'agent' ? currentUser.id : selectedAgentId; if(targetAgentId === 'all') return 'mixed'; return monthlyStatus[`status_${monthKey}_${targetAgentId}`] || 'belum'; };
@@ -1076,7 +1285,15 @@ export default function App() {
 
   if (!currentUser) return <LoginScreen onLogin={setCurrentUser} agents={agents} adminPin={companyInfo.adminPin} notify={showNotify} companyLogo={companyInfo.logo} connectionStatus={connectionStatus} />;
 
-  if (!dashboardReady) return <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-gray-50"><Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-4" /><p className="text-gray-500 font-bold text-xs tracking-widest uppercase animate-pulse">Memuat Dashboard...</p></div>;
+  // LOADING DASHBOARD STATE (Prevents blank screen)
+  if (!dashboardReady) {
+      return (
+          <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-gray-50">
+              <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-4" />
+              <p className="text-gray-500 font-bold text-xs tracking-widest uppercase animate-pulse">Memuat Dashboard...</p>
+          </div>
+      );
+  }
 
   return (
     <div className={`min-h-[100dvh] font-sans pb-32 transition-colors duration-300 supports-[min-h:100dvh]:min-h-[100dvh] ${display.mode === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
