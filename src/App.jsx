@@ -122,17 +122,15 @@ const compressImage = (file, maxWidth = 800, quality = 0.6, mimeType = 'image/jp
   });
 };
 
-// --- SOLUSI PRINT "BLANK WHITE" ---
-// Fungsi ini diperbaiki agar menunggu Tailwind load dan memaksa warna hitam
+// --- SOLUSI PRINT "BLANK WHITE" & PDF FIX ---
+// Fungsi ini dimodifikasi untuk memastikan CSS loaded sebelum print
 const handlePrintIsolated = (elementId) => {
     const content = document.getElementById(elementId);
     if (!content) return;
 
     // Cek atau buat iframe print hidden
     let iframe = document.getElementById("printFrame");
-    if (iframe) {
-        document.body.removeChild(iframe);
-    }
+    if (iframe) document.body.removeChild(iframe);
     
     iframe = document.createElement("iframe");
     iframe.id = "printFrame";
@@ -142,7 +140,6 @@ const handlePrintIsolated = (elementId) => {
     iframe.style.width = "0";
     iframe.style.height = "0";
     iframe.style.border = "0";
-    iframe.style.zIndex = "-1"; // Sembunyikan di belakang
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow.document;
@@ -150,44 +147,27 @@ const handlePrintIsolated = (elementId) => {
     // Ambil style global yang ada
     const styles = Array.from(document.querySelectorAll("style")).map(s => s.outerHTML).join("");
     
-    // Tulis ulang dokumen iframe dengan CSS paksa
+    // Tulis dokumen iframe dengan Script Tailwind dan Handler onload
     doc.open();
     doc.write(`
         <!DOCTYPE html>
         <html>
         <head>
             <title>Cetak Dokumen</title>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <script src="https://cdn.tailwindcss.com"></script>
             ${styles}
             <style>
-                @media print {
-                    @page { size: A4 portrait; margin: 0; }
-                    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                }
-                body { 
-                    background-color: white !important; 
-                    color: black !important; 
-                    margin: 0; 
-                    padding: 0; 
-                }
-                /* Paksa semua teks jadi hitam agar tidak invisible jika mode gelap */
-                * { color: black !important; text-shadow: none !important; } 
-                img { max-width: 100%; display: block; }
-                input, textarea { 
-                    border: none; 
-                    background: transparent; 
-                    font-weight: bold; 
-                    color: black !important; 
-                    resize: none; 
-                    width: 100%;
-                }
-                .print\\:hidden { display: none !important; }
+                :root { --bg-main: #fff !important; --bg-card: #fff !important; --text-main: #000 !important; }
+                body { background-color: white !important; color: black !important; margin: 0; padding: 0; }
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                @page { size: A4 portrait; margin: 0; }
+                img { max-width: 100%; break-inside: avoid; }
+                input, textarea { border: none; background: transparent; font-weight: bold; color: black; resize: none; }
+                .no-print { display: none !important; }
             </style>
         </head>
         <body>
-            <div style="width: 210mm; min-height: 297mm; background: white; margin: 0 auto; overflow: hidden;">
+            <div id="print-content" style="width: 210mm; min-height: 297mm; background: white; margin: 0 auto; overflow: hidden;">
                 ${content.innerHTML}
             </div>
             <script>
@@ -195,14 +175,17 @@ const handlePrintIsolated = (elementId) => {
                 const origInputs = parent.document.getElementById('${elementId}').querySelectorAll('input, textarea');
                 const newInputs = document.querySelectorAll('input, textarea');
                 for(let i=0; i<origInputs.length; i++) {
-                    if(newInputs[i]) newInputs[i].value = origInputs[i].value;
+                    newInputs[i].value = origInputs[i].value;
                 }
                 
-                // Tunggu sebentar agar Tailwind selesai render sebelum print
-                setTimeout(() => {
-                    window.focus();
-                    window.print();
-                }, 1000);
+                // Print otomatis setelah script Tailwind selesai
+                window.onload = function() {
+                    // Beri jeda sedikit untuk render image
+                    setTimeout(function() {
+                        window.focus();
+                        window.print();
+                    }, 1500); // Waktu tunggu ditingkatkan agar tidak blank
+                };
             </script>
         </body>
         </html>
@@ -239,6 +222,16 @@ const GlobalStyleInjector = ({ mode, fontSize }) => {
       .settings-scroll::-webkit-scrollbar { width: 6px; }
       .settings-scroll::-webkit-scrollbar-track { background: transparent; }
       .settings-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+      
+      /* Force Light Mode for PDF Generation Class */
+      .pdf-force-light {
+         --bg-main: #ffffff !important;
+         --bg-card: #ffffff !important;
+         --text-main: #000000 !important;
+         --border: #e2e8f0 !important;
+         background-color: white !important;
+         color: black !important;
+      }
       
       @keyframes shake {
         0%, 100% { transform: translateX(0); }
@@ -559,21 +552,28 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
       function executePdf() {
          const originalElement = document.getElementById('report-content');
          
+         // 1. CLONE NODE (Deep Clone)
          const element = originalElement.cloneNode(true);
          
+         // 2. FORCE STYLES ON CLONE (Fix Dark Mode Issue)
+         // Tambahkan kelas khusus dan reset variabel CSS
+         element.classList.add('pdf-force-light');
          element.style.width = '210mm';
          element.style.height = 'auto'; 
-         element.style.transform = 'none';
+         element.style.transform = 'none'; // Matikan zoom scale
          element.style.margin = '0';
-         element.style.backgroundColor = '#ffffff'; // PENTING: Force background putih
-         element.style.color = '#000000'; // PENTING: Force text hitam
+         element.style.backgroundColor = '#ffffff'; 
+         element.style.color = '#000000'; 
          
-         element.style.position = 'fixed';
-         element.style.left = '-9999px';
-         element.style.top = '0';
-         element.style.zIndex = '10000';
-         
-         document.body.appendChild(element);
+         // Buat container tersembunyi tapi di-render browser
+         const container = document.createElement('div');
+         container.style.position = 'absolute';
+         container.style.top = '0';
+         container.style.left = '0';
+         container.style.zIndex = '-9999';
+         container.style.width = '210mm';
+         container.appendChild(element);
+         document.body.appendChild(container);
 
          const opt = { 
              margin: 0, 
@@ -582,20 +582,20 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
              html2canvas: { 
                  scale: 2, 
                  useCORS: true, 
-                 windowWidth: 794, 
-                 backgroundColor: '#ffffff' // PENTING: Mencegah background hitam/transparan di PC
+                 windowWidth: 794,
+                 backgroundColor: '#ffffff' // Paksa background putih
              }, 
              jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
          };
 
          window.html2pdf().set(opt).from(element).save()
              .then(() => { 
-                 document.body.removeChild(element); 
+                 document.body.removeChild(container); 
                  if(notify) notify("PDF berhasil diunduh!", "success"); 
              })
              .catch(err => {
                  console.error(err);
-                 if(document.body.contains(element)) document.body.removeChild(element);
+                 if(document.body.contains(container)) document.body.removeChild(container);
              });
       }
   };
@@ -752,25 +752,32 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
       function executePdf() {
           const originalElement = document.getElementById('customer-invoice');
           
+          // 1. CLONE NODE 
           const element = originalElement.cloneNode(true);
+          element.classList.add('pdf-force-light');
           
+          // 2. FORCE STYLES (Clean White Background)
           element.style.width = '210mm';
-          element.style.height = '297mm'; 
-          element.style.padding = '15mm';
+          element.style.height = '297mm'; // A4 Height fix
           element.style.transform = 'none';
           element.style.margin = '0';
           element.style.backgroundColor = '#ffffff'; 
           element.style.color = '#000000';
           
-          element.style.position = 'fixed';
-          element.style.left = '-9999px';
-          element.style.top = '0';
-          element.style.zIndex = '10000';
+          // Buat container
+          const container = document.createElement('div');
+          container.style.position = 'absolute';
+          container.style.top = '0';
+          container.style.left = '0';
+          container.style.zIndex = '-9999';
+          container.style.width = '210mm';
+          container.appendChild(element);
           
+          // Remove edit hints
           const hints = element.querySelectorAll('.print\\:hidden');
           hints.forEach(el => el.remove());
 
-          document.body.appendChild(element);
+          document.body.appendChild(container);
           
           const safeName = customerName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
           const dateStr = new Date(order.date).toLocaleDateString('id-ID').replace(/\//g, '-');
@@ -780,18 +787,18 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
               margin: 0, 
               filename: filename, 
               image: { type: 'jpeg', quality: 0.98 }, 
-              html2canvas: { scale: 2, useCORS: true, windowWidth: 794, backgroundColor: '#ffffff' }, // PENTING: Fix Black Screen
+              html2canvas: { scale: 2, useCORS: true, windowWidth: 794, backgroundColor: '#ffffff' }, 
               jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
           };
           
           window.html2pdf().set(opt).from(element).save()
             .then(() => { 
-                document.body.removeChild(element); 
+                document.body.removeChild(container); 
                 if(notify) notify("Invoice disimpan!", "success"); 
             })
             .catch(err => { 
                 console.error(err); 
-                if(document.body.contains(element)) document.body.removeChild(element);
+                if(document.body.contains(container)) document.body.removeChild(container);
             });
       }
   };
@@ -1086,7 +1093,7 @@ export default function App() {
         {isAgent && viewMode === 'folders' && (<div className={`mb-8 rounded-2xl p-6 shadow-lg text-white bg-gradient-to-br ${getAgentGradient(currentUser.name)} relative overflow-hidden`}><div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div><div className="relative z-10"><div className="flex justify-between items-start mb-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70 mb-1">Tagihan Periode Bulan Ini</p><h2 className="text-xl md:text-2xl font-black uppercase tracking-wide">{new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</h2></div><div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm"><TrendingUp className="w-6 h-6 text-white"/></div></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-white/20"><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">Total Order</p><p className="text-lg font-bold">{currentMonthStats.count} Unit</p></div><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">TOTAL HARGA</p><p className="text-lg font-bold">{formatCurrency(currentMonthStats.totalHarga)}</p></div><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">Total Fee</p><p className="text-lg font-bold">{formatCurrency(currentMonthStats.totalFee)}</p></div><div><p className="text-[10px] uppercase font-bold text-white/60 mb-1">Tagihan Bersih</p><p className="text-xl font-black">{formatCurrency(currentMonthStats.totalPayment)}</p></div></div></div></div>)}
         {currentUser.role === 'admin' && viewMode === 'folders' && (<div className="mb-6 card p-4 rounded-xl shadow-sm border border-gray-200/60"><label className="text-[10px] font-bold opacity-50 uppercase ml-1 mb-1 block tracking-wider">Filter Data Mitra</label><div className="relative"><select value={selectedAgentId} onChange={(e) => { setSelectedAgentId(e.target.value); setViewMode('folders'); }} className="input-field w-full p-3 pl-4 pr-10 rounded-lg font-bold text-sm appearance-none outline-none cursor-pointer"><option value="all">-- Semua Data Mitra (Global) --</option>{agents.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"/></div></div>)}
         
-        {/* YEAR SELECTOR UI */}
+        {/* YEAR SELECTOR UI (ADDED FEATURE) */}
         {viewMode === 'folders' && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
                 <div className="flex justify-between items-center mb-2 px-1">
@@ -1131,6 +1138,7 @@ export default function App() {
                     </div>
                     
                     <div className="flex gap-1">
+                        {/* TOMBOL BARU: INVOICE CUSTOMER (Muncul untuk Admin & Mitra) */}
                         <button 
                             onClick={() => setSelectedOrderForInvoice(order)} 
                             className="px-3 py-1.5 bg-gray-900 text-white rounded text-[10px] font-bold flex items-center gap-1 hover:bg-black transition-colors shadow-lg shadow-gray-200"
@@ -1157,6 +1165,7 @@ export default function App() {
       {modals.preview && <ReportPreviewModal onClose={() => setModals({...modals, preview: false})} agentName={currentUser.role === 'agent' ? currentUser.name : agents.find(a => a.id === targetAgentIdForInput)?.name} month={selectedMonth} orders={filteredOrders.filter(o => o.monthKey === selectedMonth)} stats={folders.find(f => f.key === selectedMonth)?.stats || stats} companyInfo={companyInfo} notify={showNotify} />}
       {modals.settings && <SettingsModal onClose={() => setModals({...modals, settings: false})} companyInfo={companyInfo} agents={agents} onUpdateCompany={setCompanyInfo} notify={showNotify} display={display} onUpdateDisplay={setDisplay} />}
       
+      {/* MODAL INVOICE CUSTOMER BARU */}
       {selectedOrderForInvoice && (
         <CustomerInvoiceModal 
             order={selectedOrderForInvoice}
@@ -1168,55 +1177,3 @@ export default function App() {
     </div>
   );
 }
-
-const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectionStatus }) => {
-    const [mode, setMode] = useState('agent'); // agent | admin
-    const [code, setCode] = useState('');
-    
-    const handleLogin = (e) => {
-        e.preventDefault();
-        if (mode === 'admin') {
-            if (code === adminPin) {
-                onLogin({ name: 'Administrator', role: 'admin', id: 'admin' });
-            } else {
-                notify("PIN Salah!", "error");
-            }
-        } else {
-            const agent = agents.find(a => a.code === code.toUpperCase());
-            if (agent) {
-                onLogin({ name: agent.name, role: 'agent', id: agent.id });
-            } else {
-                notify("KODE Mitra Tidak Ditemukan!", "error");
-            }
-        }
-    };
-
-    return (
-        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 font-sans">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
-                {companyLogo ? <img src={companyLogo} className="h-20 mx-auto mb-4 object-contain"/> : <div className="w-20 h-20 bg-emerald-500 rounded-xl mx-auto mb-4 flex items-center justify-center text-white"><FileText className="w-10 h-10"/></div>}
-                <h1 className="text-2xl font-black text-gray-800 mb-1">PORTAL MFG</h1>
-                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-8">Integrated System</p>
-                
-                <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
-                    <button onClick={()=>setMode('agent')} className={`flex-1 py-2 text-xs font-bold uppercase rounded-md transition-all ${mode==='agent' ? 'bg-white shadow text-emerald-600' : 'text-gray-400'}`}>Mitra</button>
-                    <button onClick={()=>setMode('admin')} className={`flex-1 py-2 text-xs font-bold uppercase rounded-md transition-all ${mode==='admin' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}>Admin</button>
-                </div>
-
-                <form onSubmit={handleLogin} className="space-y-4">
-                    <input 
-                        type={mode === 'admin' ? 'password' : 'text'} 
-                        placeholder={mode === 'admin' ? 'PIN ADMIN' : 'KODE MITRA (Ex: A001)'}
-                        className="w-full p-4 border border-gray-300 rounded-xl text-center font-bold text-lg outline-none focus:border-emerald-500 uppercase placeholder:normal-case placeholder:font-normal placeholder:text-sm"
-                        value={code}
-                        onChange={(e)=>setCode(e.target.value)}
-                    />
-                    <button type="submit" className={`w-full py-4 rounded-xl font-black text-white shadow-lg transition-transform active:scale-95 ${mode==='admin' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}>
-                        MASUK SISTEM
-                    </button>
-                </form>
-                <p className="text-[10px] text-gray-400 mt-8">Status: {connectionStatus}</p>
-            </div>
-        </div>
-    );
-};
