@@ -9,7 +9,7 @@ import {
   Folder, ArrowLeft, CheckSquare, XSquare, Sun, Filter,
   Wallet, Truck, Percent, ShoppingBag, Camera, Pencil,
   BadgeCheck, TrendingUp, XCircle, Menu, WifiOff, Wifi,
-  Database, Info, Bug, Terminal, Activity, ChevronLeft, ChevronRight // <--- TAMBAHAN IMPORT ICON
+  Database, Info, Bug, Terminal, Activity, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -623,9 +623,9 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
   );
 };
 
-// --- MODAL INVOICE KHUSUS CUSTOMER (HEADER MITRA) ---
+// --- MODAL INVOICE KHUSUS CUSTOMER (HEADER MITRA) - REDESIGNED MODERN A4 ---
 const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
-  // State untuk data toko mitra (disimpan di LocalStorage agar tidak hilang)
+  // State untuk data toko mitra (disimpan di LocalStorage)
   const [shopProfile, setShopProfile] = useState(() => {
     const saved = localStorage.getItem('mitra_shop_profile');
     return saved ? JSON.parse(saved) : {
@@ -637,12 +637,18 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
     };
   });
 
-  // State untuk harga jual (Bisa diedit karena biasanya di-markup oleh mitra)
-  // Default ambil dari totalPayment, tapi bisa diubah
   const [sellingPrice, setSellingPrice] = useState(order.totalPayment); 
   const [customerName, setCustomerName] = useState('Pelanggan Yth');
+  const [zoomLevel, setZoomLevel] = useState(0.5); // Untuk responsive zoom
 
-  // Efek untuk menyimpan profil toko ke local storage setiap ada perubahan
+  // Responsive Zoom Scale Logic
+  useEffect(() => {
+    const handleResize = () => setZoomLevel(Math.min((window.innerWidth - 32) / 820, 1));
+    handleResize(); 
+    window.addEventListener('resize', handleResize); 
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('mitra_shop_profile', JSON.stringify(shopProfile));
   }, [shopProfile]);
@@ -670,18 +676,40 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
       }
       function executePdf() {
           const element = document.getElementById('customer-invoice');
-          const opt = { margin: 0, filename: `Invoice_${order.address.substring(0,10)}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
-          window.html2pdf().set(opt).from(element).save();
+          
+          // 1. Reset Zoom for Full Resolution
+          const originalStyle = element.style.cssText;
+          element.style.width = '210mm';
+          element.style.height = '297mm'; // A4 Height fix
+          element.style.transform = 'none';
+          element.style.margin = '0';
+          
+          // 2. Generate Filename: Invoice_NamaCustomer_Tanggal.pdf
+          const safeName = customerName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
+          const dateStr = new Date(order.date).toLocaleDateString('id-ID').replace(/\//g, '-');
+          const filename = `Invoice_${safeName}_${dateStr}.pdf`;
+
+          const opt = { 
+              margin: 0, 
+              filename: filename, 
+              image: { type: 'jpeg', quality: 0.98 }, 
+              html2canvas: { scale: 2, useCORS: true, windowWidth: 794, backgroundColor: '#ffffff' }, 
+              jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
+          };
+          
+          window.html2pdf().set(opt).from(element).save()
+            .then(() => { element.style.cssText = originalStyle; if(notify) notify("Invoice disimpan!", "success"); })
+            .catch(err => { element.style.cssText = originalStyle; console.error(err); });
       }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-[200] flex flex-col items-center animate-in fade-in duration-300 overflow-hidden">
+    <div className="fixed inset-0 bg-black/95 z-[200] flex flex-col items-center animate-in fade-in duration-300 overflow-hidden">
       {/* Toolbar Atas */}
       <div className="w-full bg-gray-900 border-b border-gray-800 p-3 flex justify-between items-center z-50 print:hidden shrink-0">
          <div className="text-white">
            <h3 className="font-bold text-sm">Invoice Customer</h3>
-           <p className="text-[10px] text-gray-400">Edit header & harga sebelum cetak</p>
+           <p className="text-[10px] text-gray-400">Edit data sebelum cetak</p>
          </div>
          <div className="flex gap-2">
            <button onClick={handlePdf} className="bg-red-600 text-white px-3 py-2 rounded-lg font-bold text-xs flex gap-2 hover:bg-red-700"><Download className="w-4 h-4"/> PDF</button>
@@ -690,93 +718,135 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
          </div>
       </div>
 
-      {/* Area Edit & Preview */}
-      <div className="flex-1 w-full overflow-y-auto bg-gray-800 p-4 print:p-0 print:bg-white flex justify-center">
-        
-        {/* Kertas A4 */}
-        <div id="customer-invoice" className="bg-white text-black shadow-2xl relative flex flex-col box-border print:shadow-none" style={{ width: '210mm', minHeight: '297mm', padding: '15mm' }}>
+      {/* Area Preview - Centered & Zoom Scaled */}
+      <div className="flex-1 w-full overflow-y-auto bg-gray-900 p-4 print:p-0 print:bg-white flex flex-col items-center">
+        <div id="customer-invoice" className="bg-white text-black shadow-2xl relative flex flex-col box-border print:shadow-none" 
+             style={{ 
+                 width: '210mm', 
+                 height: '297mm', // Fixed A4 Height
+                 padding: '15mm',
+                 transform: `scale(${zoomLevel})`,
+                 transformOrigin: 'top center',
+                 marginBottom: '20px'
+             }}>
             
-            {/* Header Mitra (Editable) */}
-            <div className="flex justify-between items-center border-b-4 border-gray-800 pb-6 mb-8 group relative">
-                <div className="flex items-center gap-4">
-                    <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden relative cursor-pointer border-2 border-transparent hover:border-blue-400" onClick={() => document.getElementById('shopLogoInput').click()}>
+            {/* MODERN HEADER */}
+            <div className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-8">
+                <div className="flex items-start gap-4">
+                    <div className="w-24 h-24 bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden relative cursor-pointer group border border-gray-200 hover:border-blue-400 transition-colors" onClick={() => document.getElementById('shopLogoInput').click()}>
                         {shopProfile.logo ? <img src={shopProfile.logo} className="w-full h-full object-contain"/> : <ImageIcon className="w-8 h-8 text-gray-300"/>}
                         <input id="shopLogoInput" type="file" hidden accept="image/*" onChange={handleLogoChange}/>
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[8px] font-bold text-center print:hidden">UBAH LOGO</div>
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[9px] font-bold text-center print:hidden">GANTI LOGO</div>
                     </div>
-                    <div>
-                        <input value={shopProfile.name} onChange={e => setShopProfile({...shopProfile, name: e.target.value})} className="text-2xl font-black text-gray-900 uppercase tracking-wide w-full outline-none placeholder-gray-300 focus:bg-blue-50 focus:px-2 rounded transition-all" placeholder="NAMA FLORIST ANDA" />
-                        <input value={shopProfile.subname} onChange={e => setShopProfile({...shopProfile, subname: e.target.value})} className="text-sm font-bold text-gray-600 uppercase tracking-[0.2em] w-full outline-none placeholder-gray-300 focus:bg-blue-50 focus:px-2 rounded transition-all" placeholder="SLOGAN / JENIS USAHA" />
-                        <textarea value={shopProfile.address} onChange={e => setShopProfile({...shopProfile, address: e.target.value})} className="text-xs text-gray-500 mt-2 w-full outline-none resize-none focus:bg-blue-50 focus:px-2 rounded transition-all" rows={2} placeholder="Alamat lengkap toko anda..." />
-                        <input value={shopProfile.phone} onChange={e => setShopProfile({...shopProfile, phone: e.target.value})} className="text-xs text-gray-500 font-bold w-full outline-none focus:bg-blue-50 focus:px-2 rounded transition-all" placeholder="No. Telp / WA" />
+                    <div className="flex flex-col pt-1">
+                        <input value={shopProfile.name} onChange={e => setShopProfile({...shopProfile, name: e.target.value})} className="text-2xl font-black text-gray-900 uppercase tracking-tight w-64 outline-none placeholder-gray-300 focus:bg-blue-50 focus:px-1 rounded -ml-1 transition-all" placeholder="NAMA FLORIST" />
+                        <input value={shopProfile.subname} onChange={e => setShopProfile({...shopProfile, subname: e.target.value})} className="text-xs font-bold text-gray-500 uppercase tracking-widest w-64 outline-none placeholder-gray-300 focus:bg-blue-50 focus:px-1 rounded -ml-1 transition-all mb-2" placeholder="Slogan Usaha" />
+                        <textarea value={shopProfile.address} onChange={e => setShopProfile({...shopProfile, address: e.target.value})} className="text-[10px] text-gray-500 w-64 outline-none resize-none focus:bg-blue-50 focus:px-1 rounded -ml-1 transition-all leading-tight" rows={2} placeholder="Alamat Lengkap..." />
+                        <input value={shopProfile.phone} onChange={e => setShopProfile({...shopProfile, phone: e.target.value})} className="text-[10px] text-gray-500 font-bold w-64 outline-none focus:bg-blue-50 focus:px-1 rounded -ml-1 transition-all mt-1" placeholder="Telp/WA" />
                     </div>
                 </div>
                 <div className="text-right">
-                    <h2 className="text-4xl font-black text-gray-200 uppercase tracking-tighter select-none">INVOICE</h2>
-                    <p className="text-xs font-mono text-gray-400 mt-1">NO: INV/{new Date(order.date).getTime().toString().slice(-6)}</p>
-                    <p className="text-xs font-mono text-gray-400">{new Date().toLocaleDateString('id-ID')}</p>
+                    <h1 className="text-5xl font-black text-gray-200 tracking-tighter leading-none select-none">INVOICE</h1>
+                    <div className="mt-2 space-y-1">
+                        <div className="text-xs font-bold text-gray-600 flex justify-end gap-2 items-center">
+                            <span className="text-gray-400 font-normal">TANGGAL</span>
+                            <span>{new Date(order.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</span>
+                        </div>
+                        <div className="text-xs font-bold text-gray-600 flex justify-end gap-2 items-center">
+                            <span className="text-gray-400 font-normal">NO. INV</span>
+                            <span>INV-{new Date(order.date).getFullYear()}{(new Date(order.date).getMonth()+1).toString().padStart(2,'0')}-{new Date(order.date).getDate().toString().padStart(2,'0')}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Customer Info */}
-            <div className="mb-8">
-                <p className="text-xs font-bold text-gray-400 uppercase mb-2">Kepada Yth:</p>
-                <input value={customerName} onChange={e => setCustomerName(e.target.value)} className="text-lg font-bold text-gray-800 w-full outline-none border-b border-dashed border-gray-300 focus:border-blue-500 mb-2" />
-                <div className="p-4 bg-gray-50 rounded border border-gray-100">
-                    <p className="text-sm text-gray-600 italic">"{order.address}"</p>
-                    {order.description && <p className="text-xs text-gray-500 mt-2">Catatan: {order.description}</p>}
+            {/* BILL TO SECTION */}
+            <div className="grid grid-cols-2 gap-10 mb-8">
+                <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">DITAGIHKAN KEPADA:</p>
+                    <input value={customerName} onChange={e => setCustomerName(e.target.value)} className="text-xl font-bold text-gray-800 w-full outline-none border-b border-dashed border-gray-300 focus:border-blue-500 mb-1 py-1" />
+                    <p className="text-xs text-gray-500 italic mt-1">Pelanggan Terhormat</p>
+                </div>
+                <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">DETAIL PENGIRIMAN:</p>
+                    <div className="bg-gray-50 p-3 rounded border border-gray-200 h-full">
+                         <div className="flex justify-between text-xs mb-1"><span className="text-gray-500">Tgl Kirim:</span><span className="font-bold">{formatDateShort(order.deliveryDate)}</span></div>
+                         <div className="text-xs text-gray-800 font-medium leading-relaxed">"{order.address}"</div>
+                    </div>
                 </div>
             </div>
 
-            {/* Order Details Image */}
-            <div className="mb-8 flex justify-center bg-gray-50 border border-gray-200 rounded-xl overflow-hidden p-2 h-[80mm]">
-                 {order.photo ? <img src={order.photo} className="h-full object-contain rounded-lg shadow-sm" /> : <div className="flex items-center justify-center w-full h-full text-gray-300 text-sm">Tidak ada foto produk</div>}
+            {/* PRODUCT IMAGE - CENTERED MODERN */}
+            <div className="mb-6 flex justify-center">
+                 <div className="w-[80mm] h-[80mm] bg-gray-50 border border-gray-200 rounded-lg p-2 flex items-center justify-center overflow-hidden shadow-inner">
+                    {order.photo ? <img src={order.photo} className="w-full h-full object-contain rounded" /> : <div className="text-gray-300 text-xs text-center">Tidak ada foto<br/>produk dilampirkan</div>}
+                 </div>
             </div>
 
-            {/* Payment Details */}
-            <div className="mt-auto">
-                <table className="w-full text-sm mb-8">
-                    <thead className="border-b-2 border-gray-800">
-                        <tr>
-                            <th className="text-left py-2 font-black uppercase">Deskripsi Produk</th>
-                            <th className="text-right py-2 font-black uppercase w-40">Total Tagihan</th>
+            {/* MODERN TABLE */}
+            <div className="mb-auto">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="bg-gray-900 text-white">
+                            <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider rounded-l-md w-[60%]">Deskripsi Produk</th>
+                            <th className="py-3 px-4 text-right text-xs font-bold uppercase tracking-wider rounded-r-md">Jumlah (IDR)</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr>
-                            <td className="py-4 text-gray-600 font-medium">
-                                Pemesanan Rangkaian Bunga / Papan Bunga
-                                <br/><span className="text-xs text-gray-400">Tanggal Kirim: {formatDateShort(order.deliveryDate)}</span>
+                    <tbody className="text-gray-700">
+                        <tr className="border-b border-gray-100">
+                            <td className="py-4 px-4 align-top">
+                                <p className="font-bold text-gray-800 mb-1">Pemesanan Papan Bunga / Rangkaian</p>
+                                <p className="text-xs text-gray-500 leading-relaxed max-w-sm">
+                                    Ucapan: {order.address} <br/>
+                                    {order.description && <span className="italic">Note: {order.description}</span>}
+                                </p>
                             </td>
-                            <td className="py-4 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                    <span className="text-gray-500 font-bold">Rp</span>
+                            <td className="py-4 px-4 text-right align-top font-medium text-lg">
+                                <div className="flex justify-end items-center gap-1 group relative">
+                                    <span className="text-xs text-gray-400 font-normal mr-1">Rp</span>
                                     <input 
                                         type="number" 
                                         value={sellingPrice} 
                                         onChange={e => setSellingPrice(e.target.value)} 
-                                        className="font-black text-xl text-right outline-none w-32 border-b border-transparent hover:border-gray-300 focus:border-blue-500 transition-colors bg-transparent"
+                                        className="font-black text-xl text-right outline-none w-32 border-b border-transparent hover:border-gray-300 focus:border-blue-500 transition-colors bg-transparent p-0 m-0"
                                     />
+                                    <span className="absolute -top-3 right-0 text-[8px] bg-blue-100 text-blue-600 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity print:hidden pointer-events-none">Edit Harga</span>
                                 </div>
                             </td>
                         </tr>
                     </tbody>
                 </table>
-
-                {/* Footer Signature */}
-                <div className="flex justify-between items-end px-4">
-                    <div className="text-xs text-gray-400 italic max-w-[200px]">
-                        Terima kasih atas kepercayaan Anda menggunakan jasa kami.
-                    </div>
-                    <div className="text-center">
-                        <p className="mb-16 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hormat Kami,</p>
-                        <p className="font-bold border-t border-gray-300 pt-2 min-w-[150px] text-sm uppercase">{shopProfile.name}</p>
+                
+                {/* TOTAL SECTION */}
+                <div className="flex justify-end mt-4 px-4">
+                    <div className="w-1/2 border-t-2 border-gray-900 pt-3">
+                        <div className="flex justify-between items-center">
+                            <span className="text-lg font-black text-gray-900 uppercase tracking-tight">Total Tagihan</span>
+                            <span className="text-2xl font-black text-gray-900">{formatCurrency(sellingPrice)}</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="print:hidden absolute top-2 right-2 text-[10px] text-red-400 bg-red-50 px-2 py-1 rounded border border-red-100 opacity-50 hover:opacity-100 pointer-events-none">
-                *Klik teks untuk mengedit langsung
+            {/* FOOTER */}
+            <div className="flex justify-between items-end mt-8 border-t border-dashed border-gray-300 pt-6">
+                <div className="max-w-[50%]">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">METODE PEMBAYARAN:</p>
+                    <div className="text-xs text-gray-600 space-y-1">
+                        <p>Silakan transfer ke rekening berikut:</p>
+                        {/* Contoh rekening default jika ada, bisa di hardcode atau ambil dari profil */}
+                        <p className="font-mono bg-gray-100 inline-block px-2 py-1 rounded">BCA / MANDIRI / BRI</p>
+                    </div>
+                    <p className="text-[10px] text-gray-400 italic mt-4">Terima kasih atas kepercayaan Anda.</p>
+                </div>
+                <div className="text-center">
+                    <p className="mb-16 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hormat Kami,</p>
+                    <p className="font-bold border-t border-gray-400 pt-2 min-w-[150px] text-sm uppercase">{shopProfile.name}</p>
+                </div>
+            </div>
+
+            <div className="print:hidden absolute top-2 right-2 text-[10px] text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100 opacity-70 hover:opacity-100 cursor-help">
+                *Klik teks untuk mengedit data toko & harga
             </div>
         </div>
       </div>
@@ -834,7 +904,7 @@ const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectio
                  collRef = getCollection('Agents', true);
                  snap = await getDocs(collRef);
              }
-             return snap.docs.map(d => ({id: d.id, ...d.data(), code: d.data().code || d.data().Code || d.data().kode || d.data().KODE }));
+             return snap.docs.map(d => ({id: d.id, ...d.data(), code: d.data().code || d.data().Code || d.data().kode || d.data().Kode || d.data().KODE }));
         })();
 
         const timeoutPromise = new Promise((_, reject) => 
@@ -910,7 +980,7 @@ const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectio
         
         {/* Version Footer */}
         <div className="mt-8 text-center">
-            <p className="text-[9px] text-gray-400 opacity-50">v8.9 (Year Selector Added)</p>
+            <p className="text-[9px] text-gray-400 opacity-50">v9.0 (Modern Invoice & Auto-PDF)</p>
         </div>
         
       </div>
