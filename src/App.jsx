@@ -9,8 +9,7 @@ import {
   Folder, ArrowLeft, CheckSquare, XSquare, Sun, Filter,
   Wallet, Truck, Percent, ShoppingBag, Camera, Pencil,
   BadgeCheck, TrendingUp, XCircle, Menu, WifiOff, Wifi,
-  Database, Info, Bug, Terminal, Activity, ChevronLeft, ChevronRight,
-  Share2, MapPin, Clock
+  Database, Info, Bug, Terminal, Activity, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -124,12 +123,10 @@ const compressImage = (file, maxWidth = 800, quality = 0.6, mimeType = 'image/jp
 };
 
 // --- SOLUSI PRINT "BLANK WHITE" ---
-// Fungsi ini membuat iframe terisolasi, menyuntikkan CSS Tailwind, dan mencetak isinya.
 const handlePrintIsolated = (elementId) => {
     const content = document.getElementById(elementId);
     if (!content) return;
 
-    // Cek atau buat iframe print hidden
     let iframe = document.getElementById("printFrame");
     if (!iframe) {
         iframe = document.createElement("iframe");
@@ -144,11 +141,8 @@ const handlePrintIsolated = (elementId) => {
     }
 
     const doc = iframe.contentWindow.document;
-    
-    // Ambil style global yang ada
     const styles = Array.from(document.querySelectorAll("style")).map(s => s.outerHTML).join("");
     
-    // Tulis ulang dokumen iframe
     doc.open();
     doc.write(`
         <html>
@@ -158,17 +152,16 @@ const handlePrintIsolated = (elementId) => {
             ${styles}
             <style>
                 body { background-color: white !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
-                @page { size: auto; margin: 0; }
+                @page { size: A4 portrait; margin: 0; }
                 img { max-width: 100%; }
                 input, textarea { border: none; background: transparent; font-weight: bold; color: black; resize: none; }
             </style>
         </head>
         <body>
-            <div style="width: 100%; height: 100%; background: white; margin: 0 auto; overflow: hidden; padding: 20px;">
+            <div style="width: 210mm; min-height: 297mm; background: white; margin: 0 auto; overflow: hidden;">
                 ${content.innerHTML}
             </div>
             <script>
-                // Salin value input manual karena innerHTML tidak membawanya
                 const origInputs = parent.document.getElementById('${elementId}').querySelectorAll('input, textarea');
                 const newInputs = document.querySelectorAll('input, textarea');
                 for(let i=0; i<origInputs.length; i++) {
@@ -179,8 +172,6 @@ const handlePrintIsolated = (elementId) => {
         </html>
     `);
     doc.close();
-
-    // Tunggu render sebentar lalu print
     iframe.contentWindow.focus();
     setTimeout(() => {
         iframe.contentWindow.print();
@@ -524,7 +515,7 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
   const handlePrint = () => handlePrintIsolated('report-content');
   
   const handlePdf = () => {
-      // 1. Load Lib
+      // 1. Load library if missing
       if (!window.html2pdf) {
           const script = document.createElement('script');
           script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
@@ -687,167 +678,128 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
   );
 };
 
-// --- MODAL: ORDER SUMMARY CARD (POPUP RANGKUMAN CANTIK) ---
-const OrderSummaryModal = ({ onClose, order, agentName, notify }) => {
-  // Logic untuk download gambar/PDF kartu
-  const handleDownload = () => {
-      // 1. Load Lib
-      if (!window.html2pdf) {
-          const script = document.createElement('script');
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-          script.onload = () => executeDownload();
-          document.body.appendChild(script);
-      } else {
-          executeDownload();
-      }
-
-      function executeDownload() {
-          const element = document.getElementById('summary-card');
-          
-          // Clone untuk render bersih
-          const clone = element.cloneNode(true);
-          
-          // Wrapper agar ukuran pas (tidak A4, tapi ukuran kartu)
-          const wrapper = document.createElement('div');
-          wrapper.style.position = 'fixed';
-          wrapper.style.left = '-9999px';
-          wrapper.style.top = '0';
-          wrapper.style.width = '380px'; // Lebar fix kartu
-          wrapper.appendChild(clone);
-          document.body.appendChild(wrapper);
-
-          // Force Styles
-          clone.style.width = '100%';
-          clone.style.height = 'auto';
-          clone.style.boxShadow = 'none';
-          clone.style.backgroundColor = '#ffffff';
-          clone.style.borderRadius = '0'; // Flat saat di download
-
-          const safeName = (agentName || 'Order').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 15);
-          const dateStr = new Date(order.date).toLocaleDateString('id-ID').replace(/\//g, '-');
-          
-          const opt = {
-              margin: 0,
-              filename: `Rangkuman_${safeName}_${dateStr}.pdf`,
-              image: { type: 'jpeg', quality: 1.0 },
-              html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-              jsPDF: { unit: 'px', format: [380, wrapper.offsetHeight], orientation: 'portrait' }
-          };
-
-          window.html2pdf().set(opt).from(clone).save().then(() => {
-              document.body.removeChild(wrapper);
-              if(notify) notify("Rangkuman tersimpan!", "success");
-          });
-      }
+// --- MODERN ORDER SUMMARY POPUP (PENGGANTI INVOICE) ---
+const OrderSummaryModal = ({ onClose, order, agentName }) => {
+  // Format Tanggal Cantik
+  const formatDateBeautiful = (dateStr) => {
+    return new Date(dateStr).toLocaleDateString('id-ID', { 
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' 
+    });
   };
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
-       <div className="relative w-full max-w-sm">
-           <button onClick={onClose} className="absolute -top-12 right-0 md:-right-12 text-white p-2 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
-           
-           {/* MAIN CARD CONTAINER */}
-           <div id="summary-card" className="bg-white rounded-[2rem] overflow-hidden shadow-2xl relative">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
+      <div 
+        className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300 ring-1 ring-white/20"
+      >
+        {/* --- HEADER IMAGE AREA --- */}
+        <div className="relative h-64 md:h-72 bg-gray-100 shrink-0">
+          {order.photo ? (
+            <img 
+              src={order.photo} 
+              className="w-full h-full object-cover" 
+              alt="Bukti Order"
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 bg-slate-50">
+              <ImageIcon className="w-16 h-16 mb-2 opacity-20" />
+              <span className="text-xs font-medium opacity-40">Tidak ada foto</span>
+            </div>
+          )}
+          
+          {/* Gradient Overlay untuk Text Readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30"></div>
+
+          {/* Tombol Close Floating */}
+          <button 
+            onClick={onClose}
+            className="absolute top-4 right-4 bg-white/20 hover:bg-white/40 backdrop-blur-md text-white p-2 rounded-full transition-all border border-white/10 shadow-lg group"
+          >
+            <X className="w-5 h-5 group-hover:rotate-90 transition-transform"/>
+          </button>
+
+          {/* Badges di atas Image */}
+          <div className="absolute bottom-4 left-4 right-4 text-white">
+            <div className="flex items-center gap-2 mb-1">
+               <span className="px-2.5 py-1 bg-emerald-500/90 backdrop-blur-md rounded-lg text-[10px] font-black uppercase tracking-wider shadow-lg flex items-center gap-1">
+                 <Truck className="w-3 h-3"/> Dikirim: {formatDateShort(order.deliveryDate)}
+               </span>
+               <span className="px-2.5 py-1 bg-white/20 backdrop-blur-md rounded-lg text-[10px] font-bold border border-white/20">
+                 {agentName || 'Mitra'}
+               </span>
+            </div>
+            <h2 className="text-xl font-black leading-tight shadow-black drop-shadow-md line-clamp-2">
+              {order.address}
+            </h2>
+          </div>
+        </div>
+
+        {/* --- SCROLLABLE CONTENT --- */}
+        <div className="flex-1 overflow-y-auto p-6 bg-white relative">
+          
+          {/* Decorative Top Pill */}
+          <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 opacity-50"></div>
+
+          <div className="space-y-6">
+            
+            {/* Section: Rincian Waktu */}
+            <div className="flex gap-4">
+               <div className="flex-1 bg-blue-50/50 p-3 rounded-2xl border border-blue-100 flex flex-col items-center justify-center text-center">
+                  <span className="text-[10px] text-blue-400 font-bold uppercase mb-1">Tanggal Order</span>
+                  <span className="text-xs font-black text-blue-900">{formatDateBeautiful(order.date)}</span>
+               </div>
+               <div className="flex-1 bg-purple-50/50 p-3 rounded-2xl border border-purple-100 flex flex-col items-center justify-center text-center">
+                  <span className="text-[10px] text-purple-400 font-bold uppercase mb-1">ID Transaksi</span>
+                  <span className="text-xs font-black text-purple-900 truncate w-full px-2">#{order.id.slice(-6).toUpperCase()}</span>
+               </div>
+            </div>
+
+            {/* Section: Note / Deskripsi */}
+            <div className="relative pl-4 border-l-4 border-emerald-500 py-1">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Catatan Tambahan</p>
+              <p className="text-sm font-medium text-gray-700 italic leading-relaxed">
+                "{order.description || 'Tidak ada catatan khusus untuk pesanan ini.'}"
+              </p>
+            </div>
+
+            {/* Section: Financial Card */}
+            <div className="bg-gray-900 text-white rounded-2xl p-5 shadow-xl shadow-gray-200 relative overflow-hidden">
+               {/* Background Pattern */}
+               <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
                
-               {/* 1. HERO IMAGE SECTION */}
-               <div className="h-72 relative bg-gray-100">
-                   {order.photo ? (
-                       <img src={order.photo} className="w-full h-full object-cover" alt="Bukti Pesanan" />
-                   ) : (
-                       <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 bg-slate-50">
-                           <ImageIcon className="w-12 h-12 mb-2"/>
-                           <span className="text-xs font-bold uppercase tracking-widest">No Photo</span>
-                       </div>
-                   )}
-                   {/* Gradient Overlay */}
-                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
-                   
-                   {/* Status Badge */}
-                   <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">Order Berhasil</span>
-                   </div>
-
-                   {/* Date Badge */}
-                   <div className="absolute bottom-4 left-4 text-white">
-                        <p className="text-[10px] font-medium opacity-80 uppercase tracking-wider mb-0.5">Tanggal Order</p>
-                        <p className="text-lg font-black leading-none">{new Date(order.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                   </div>
+               <div className="relative z-10 space-y-3">
+                 <div className="flex justify-between items-center text-xs opacity-70">
+                    <span>Harga Produk</span>
+                    <span className="font-mono">{formatCurrency(order.price)}</span>
+                 </div>
+                 <div className="flex justify-between items-center text-xs opacity-70 border-b border-white/10 pb-3">
+                    <span>Ongkos Kirim</span>
+                    <span className="font-mono">{formatCurrency(order.shipping)}</span>
+                 </div>
+                 <div className="flex justify-between items-end pt-1">
+                    <div>
+                      <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-0.5">Total Akhir</p>
+                      <p className="text-[10px] opacity-50">Sudah Termasuk Fee</p>
+                    </div>
+                    <span className="text-2xl font-black tracking-tight">{formatCurrency(order.totalPayment)}</span>
+                 </div>
                </div>
+            </div>
 
-               {/* 2. CONTENT BODY */}
-               <div className="p-6 relative">
-                   {/* Floating Action Button (Download) inside layout for preview, hidden in print if needed, but here we want it visible in UI */}
-                   
-                   {/* Title Header */}
-                   <div className="flex justify-between items-end mb-6">
-                       <div>
-                           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Penerima / Ucapan</p>
-                           <h2 className="text-lg font-bold text-gray-800 leading-snug line-clamp-3">{order.address}</h2>
-                       </div>
-                       <div className="text-right">
-                           <div className="bg-blue-50 text-blue-600 p-2 rounded-xl mb-1 inline-block">
-                               <Truck className="w-5 h-5" />
-                           </div>
-                       </div>
-                   </div>
+          </div>
+        </div>
 
-                   {/* Details Grid */}
-                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 mb-6">
-                       <div className="flex items-center gap-3 mb-3 pb-3 border-b border-dashed border-slate-200">
-                           <div className="bg-white p-1.5 rounded-full shadow-sm text-slate-400"><Calendar className="w-3 h-3"/></div>
-                           <div>
-                               <p className="text-[9px] font-bold text-gray-400 uppercase">Jadwal Kirim</p>
-                               <p className="text-xs font-bold text-slate-700">{formatDateShort(order.deliveryDate)}</p>
-                           </div>
-                       </div>
-                       <div className="flex items-center gap-3">
-                           <div className="bg-white p-1.5 rounded-full shadow-sm text-slate-400"><User className="w-3 h-3"/></div>
-                           <div>
-                               <p className="text-[9px] font-bold text-gray-400 uppercase">Mitra / Agen</p>
-                               <p className="text-xs font-bold text-slate-700">{agentName || '-'}</p>
-                           </div>
-                       </div>
-                   </div>
+        {/* --- FOOTER ACTION --- */}
+        <div className="p-4 bg-white border-t border-gray-100 shrink-0">
+          <button 
+            onClick={onClose} 
+            className="w-full py-4 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl font-black text-sm uppercase tracking-wide transition-all active:scale-[0.98]"
+          >
+            Tutup Rangkuman
+          </button>
+        </div>
 
-                   {/* Financial Summary */}
-                   <div className="space-y-2">
-                       <div className="flex justify-between items-center text-xs text-gray-500">
-                           <span>Harga Produk</span>
-                           <span className="font-medium">{formatCurrency(order.price)}</span>
-                       </div>
-                       <div className="flex justify-between items-center text-xs text-gray-500">
-                           <span>Biaya Ongkir</span>
-                           <span className="font-medium">{formatCurrency(order.shipping)}</span>
-                       </div>
-                       {order.fee > 0 && (
-                           <div className="flex justify-between items-center text-xs text-red-400">
-                               <span>Potongan Fee</span>
-                               <span>-{formatCurrency(order.fee)}</span>
-                           </div>
-                       )}
-                       <div className="flex justify-between items-center pt-3 mt-1 border-t border-gray-100">
-                           <span className="font-black text-gray-800 text-sm uppercase tracking-wider">Total Tagihan</span>
-                           <span className="font-black text-xl text-emerald-600">{formatCurrency(order.totalPayment)}</span>
-                       </div>
-                   </div>
-               </div>
-
-               {/* 3. DECORATIVE BOTTOM */}
-               <div className="h-2 bg-gradient-to-r from-emerald-400 via-teal-500 to-blue-500"></div>
-           </div>
-
-           {/* ACTION BUTTONS (OUTSIDE CARD) */}
-           <div className="mt-4 flex gap-3">
-               <button onClick={handleDownload} className="flex-1 bg-white text-gray-800 py-3 rounded-xl font-bold text-sm shadow-lg flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors">
-                   <Share2 className="w-4 h-4"/> Simpan / Share
-               </button>
-               {/* Tombol Print Fisik Opsional */}
-               <button onClick={() => handlePrintIsolated('summary-card')} className="bg-gray-800 text-white p-3 rounded-xl shadow-lg hover:bg-black transition-colors">
-                   <Printer className="w-4 h-4"/>
-               </button>
-           </div>
-       </div>
+      </div>
     </div>
   );
 };
@@ -978,7 +930,7 @@ const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectio
         
         {/* Version Footer */}
         <div className="mt-8 text-center">
-            <p className="text-[9px] text-gray-400 opacity-50">v9.4 (Beautiful Summary Card)</p>
+            <p className="text-[9px] text-gray-400 opacity-50">v9.2 (PC Print & PDF Fixed)</p>
         </div>
         
       </div>
@@ -1272,13 +1224,13 @@ export default function App() {
                     </div>
                     
                     <div className="flex gap-1">
-                        {/* TOMBOL BARU: RANGKUMAN (REPLACING INVOICE) */}
+                        {/* TOMBOL BARU: RANGKUMAN ORDER (Ganti label Invoice) */}
                         <button 
                             onClick={() => setSelectedOrderForInvoice(order)} 
-                            className="px-3 py-1.5 bg-gray-900 text-white rounded text-[10px] font-bold flex items-center gap-1 hover:bg-black transition-colors shadow-lg shadow-gray-200"
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 ${display.mode === 'dark' ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'}`}
                         >
-                            <FileText className="w-3 h-3" />
-                            RANGKUMAN
+                            <FileText className="w-3 h-3 text-emerald-500" />
+                            DETAIL
                         </button>
 
                         {currentUser.role === 'admin' && (
@@ -1299,13 +1251,12 @@ export default function App() {
       {modals.preview && <ReportPreviewModal onClose={() => setModals({...modals, preview: false})} agentName={currentUser.role === 'agent' ? currentUser.name : agents.find(a => a.id === targetAgentIdForInput)?.name} month={selectedMonth} orders={filteredOrders.filter(o => o.monthKey === selectedMonth)} stats={folders.find(f => f.key === selectedMonth)?.stats || stats} companyInfo={companyInfo} notify={showNotify} />}
       {modals.settings && <SettingsModal onClose={() => setModals({...modals, settings: false})} companyInfo={companyInfo} agents={agents} onUpdateCompany={setCompanyInfo} notify={showNotify} display={display} onUpdateDisplay={setDisplay} />}
       
-      {/* MODAL ORDER SUMMARY (RANGKUMAN) BARU */}
+      {/* MODAL RANGKUMAN ORDER (Updated) */}
       {selectedOrderForInvoice && (
         <OrderSummaryModal 
             order={selectedOrderForInvoice}
             agentName={currentUser.role === 'agent' ? currentUser.name : agents.find(a => a.id === selectedOrderForInvoice.agentId)?.name}
             onClose={() => setSelectedOrderForInvoice(null)}
-            notify={showNotify}
         />
       )}
     </div>
