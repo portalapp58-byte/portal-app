@@ -1070,6 +1070,11 @@ export default function App() {
       }
   }, [currentUser]);
 
+  // --- FIX: SCROLL TO TOP ON VIEW CHANGE ---
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [viewMode, selectedAgentId]);
+
   const handleSaveOrder = async (d) => { 
       try { 
           if (d.id) { 
