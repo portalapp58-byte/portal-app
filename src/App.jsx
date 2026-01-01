@@ -523,6 +523,7 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
   const handlePrint = () => handlePrintIsolated('report-content');
   
   const handlePdf = () => {
+      // 1. Load library if missing
       if (!window.html2pdf) {
           const script = document.createElement('script');
           script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
@@ -535,28 +536,29 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
       function executePdf() {
          const originalElement = document.getElementById('report-content');
          
-         // 1. CLONE NODE (Deep Clone)
+         // 2. Clone the element
          const element = originalElement.cloneNode(true);
          
-         // 2. FORCE STYLES ON CLONE (Fix Dark Mode Issue)
-         // Tambahkan kelas khusus dan reset variabel CSS
-         element.style.width = '210mm';
-         element.style.height = 'auto'; 
-         element.style.transform = 'none'; // Matikan zoom scale
-         element.style.margin = '0';
-         element.style.backgroundColor = '#ffffff'; 
-         element.style.color = '#000000'; 
-         
-         // Buat container tersembunyi tapi di-render browser
-         const container = document.createElement('div');
-         container.style.position = 'absolute';
-         container.style.top = '0';
-         container.style.left = '0';
-         container.style.zIndex = '-9999';
-         container.style.width = '210mm';
-         container.appendChild(element);
-         document.body.appendChild(container);
+         // 3. Create a wrapper to force Desktop width on Mobile (Fix "Penataan Kurang Pas")
+         const wrapper = document.createElement('div');
+         wrapper.style.position = 'fixed';
+         wrapper.style.left = '-9999px';
+         wrapper.style.top = '0';
+         wrapper.style.width = '210mm'; // Force A4 Width
+         wrapper.style.zIndex = '9999';
+         wrapper.appendChild(element);
+         document.body.appendChild(wrapper);
 
+         // 4. Force Styles for PDF (Fix "Blank Hitam" & Layout)
+         element.style.width = '100%';
+         element.style.height = 'auto'; 
+         element.style.transform = 'none'; // Remove Preview Zoom
+         element.style.margin = '0';
+         element.style.padding = '0';
+         element.style.backgroundColor = '#ffffff'; // Force White Background
+         element.style.color = '#000000'; // Force Black Text
+
+         // 5. PDF Options
          const opt = { 
              margin: 0, 
              filename: `Laporan_${agentName || 'All'}_${month}.pdf`, 
@@ -564,20 +566,22 @@ const ReportPreviewModal = ({ onClose, agentName, month, orders, stats, companyI
              html2canvas: { 
                  scale: 2, 
                  useCORS: true, 
-                 windowWidth: 794,
-                 backgroundColor: '#ffffff' // Paksa background putih
+                 windowWidth: 794, // Force Desktop Viewport Width
+                 backgroundColor: '#ffffff' // Fix Black Background
              }, 
              jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
          };
 
+         // 6. Generate
          window.html2pdf().set(opt).from(element).save()
              .then(() => { 
-                 document.body.removeChild(container); 
+                 // Cleanup
+                 document.body.removeChild(wrapper); 
                  if(notify) notify("PDF berhasil diunduh!", "success"); 
              })
              .catch(err => {
                  console.error(err);
-                 if(document.body.contains(container)) document.body.removeChild(container);
+                 if(document.body.contains(wrapper)) document.body.removeChild(wrapper);
              });
       }
   };
@@ -723,6 +727,7 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
   const handlePrint = () => handlePrintIsolated('customer-invoice');
   
   const handlePdf = () => {
+      // 1. Load Lib
       if (!window.html2pdf) {
           const script = document.createElement('script');
           script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
@@ -734,32 +739,32 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
       function executePdf() {
           const originalElement = document.getElementById('customer-invoice');
           
-          // 1. CLONE NODE 
+          // 2. Clone
           const element = originalElement.cloneNode(true);
           
-          // 2. FORCE STYLES (Clean White Background)
-          element.style.width = '210mm';
-          element.style.height = '297mm'; // A4 Height fix
+          // 3. Wrapper for Mobile Alignment
+          const wrapper = document.createElement('div');
+          wrapper.style.position = 'fixed';
+          wrapper.style.left = '-9999px';
+          wrapper.style.top = '0';
+          wrapper.style.width = '210mm'; // Force A4
+          wrapper.style.zIndex = '9999';
+          wrapper.appendChild(element);
+          document.body.appendChild(wrapper);
+
+          // 4. Force Styles (White BG, No Zoom)
+          element.style.width = '100%';
+          element.style.height = 'auto';
           element.style.transform = 'none';
           element.style.margin = '0';
           element.style.backgroundColor = '#ffffff'; 
           element.style.color = '#000000';
           
-          // Buat container
-          const container = document.createElement('div');
-          container.style.position = 'absolute';
-          container.style.top = '0';
-          container.style.left = '0';
-          container.style.zIndex = '-9999';
-          container.style.width = '210mm';
-          container.appendChild(element);
-          
           // Remove edit hints
           const hints = element.querySelectorAll('.print\\:hidden');
           hints.forEach(el => el.remove());
 
-          document.body.appendChild(container);
-          
+          // 5. Options
           const safeName = customerName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
           const dateStr = new Date(order.date).toLocaleDateString('id-ID').replace(/\//g, '-');
           const filename = `Invoice_${safeName}_${dateStr}.pdf`;
@@ -768,18 +773,24 @@ const CustomerInvoiceModal = ({ onClose, order, agentName, notify }) => {
               margin: 0, 
               filename: filename, 
               image: { type: 'jpeg', quality: 0.98 }, 
-              html2canvas: { scale: 2, useCORS: true, windowWidth: 794, backgroundColor: '#ffffff' }, 
+              html2canvas: { 
+                  scale: 2, 
+                  useCORS: true, 
+                  windowWidth: 794, // Force Desktop Width
+                  backgroundColor: '#ffffff' // Fix Black BG
+              }, 
               jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
           };
           
+          // 6. Generate
           window.html2pdf().set(opt).from(element).save()
             .then(() => { 
-                document.body.removeChild(container); 
+                document.body.removeChild(wrapper); 
                 if(notify) notify("Invoice disimpan!", "success"); 
             })
             .catch(err => { 
                 console.error(err); 
-                if(document.body.contains(container)) document.body.removeChild(container);
+                if(document.body.contains(wrapper)) document.body.removeChild(wrapper);
             });
       }
   };
@@ -1061,7 +1072,7 @@ const LoginScreen = ({ onLogin, agents, adminPin, notify, companyLogo, connectio
         
         {/* Version Footer */}
         <div className="mt-8 text-center">
-            <p className="text-[9px] text-gray-400 opacity-50">v9.3 (Print Fixed)</p>
+            <p className="text-[9px] text-gray-400 opacity-50">v9.2 (PC Print & PDF Fixed)</p>
         </div>
         
       </div>
